@@ -4,8 +4,7 @@ import { WebSocketServer, WebSocket } from 'ws';
 import { createServer } from 'http';
 import dotenv from 'dotenv';
 import fs from 'fs';
-import { fileURLToPath } from 'url';
-import { dirname, join } from 'path';
+import { join } from 'path';
 import { TelegramClient } from 'telegram';
 import { StringSession } from 'telegram/sessions/index.js';
 import { NewMessage, NewMessageEvent } from 'telegram/events/index.js';
@@ -13,7 +12,7 @@ import { CustomFile } from 'telegram/client/uploads.js';
 
 dotenv.config();
 
-const PORT = parseInt(process.env.BACKEND_PORT || process.env.PORT || '3001');
+const PORT = parseInt(process.env.PORT || process.env.BACKEND_PORT || '3000');
 const TELEGRAM_API_ID = parseInt(process.env.TELEGRAM_API_ID || '0');
 const TELEGRAM_API_HASH = process.env.TELEGRAM_API_HASH || '';
 const TELEGRAM_SESSION_STRING = process.env.TELEGRAM_SESSION_STRING || '';
@@ -399,9 +398,7 @@ app.get('/api/health', (_req, res) => {
 });
 
 // ── Static (Vite build output) ────────────────────────────────────────────────
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = dirname(__filename);
-const distPath = join(__dirname, '..', '..', 'dist');
+const distPath = join(process.cwd(), 'dist');
 app.use(express.static(distPath));
 app.get('*', (_req, res) => {
   const indexPath = join(distPath, 'index.html');
