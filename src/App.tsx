@@ -1091,7 +1091,7 @@ export default function App() {
 
       <div className="controls">
         <div className="controls-row">
-          {/* Left group */}
+          {/* Left group: speed + silence only (grid col 1) */}
           <div className="controls-left">
             <div className="speed-controls">
               <span>Speed</span>
@@ -1117,14 +1117,16 @@ export default function App() {
                 </button>
               ))}
             </div>
-            {/* Status lives in left group so PTT stays centered */}
+          </div>
+
+          {/* Narrow-only left: status shown left of PTT in portrait (hidden on wide) */}
+          <div className="narrow-left">
             <div className={`status-indicator ${status}`}>
               {STATUS_ICONS[status]} {STATUS_LABELS[status]}
             </div>
             {!micActivated && (
               <button
                 className="btn"
-                id="activateBtn"
                 title="Activate microphone"
                 onClick={() => { unlockAudio(); unlockAudioCtx(); startMeter() }}
               >
@@ -1133,7 +1135,7 @@ export default function App() {
             )}
           </div>
 
-          {/* Hold-to-talk (center) */}
+          {/* Hold-to-talk (grid col 2 — always centered) */}
           <button
             className={`ptt-btn ${isRecording ? 'recording' : ''}`}
             disabled={recordingCooldown || vadEnabled}
@@ -1148,8 +1150,21 @@ export default function App() {
             🎙️
           </button>
 
-          {/* Right group — two buttons */}
+          {/* Right group: status + buttons (grid col 3) */}
           <div className="controls-right">
+            <div className={`status-indicator ${status}`}>
+              {STATUS_ICONS[status]} {STATUS_LABELS[status]}
+            </div>
+            {!micActivated && (
+              <button
+                className="btn"
+                id="activateBtn"
+                title="Activate microphone"
+                onClick={() => { unlockAudio(); unlockAudioCtx(); startMeter() }}
+              >
+                👂
+              </button>
+            )}
             <button
               className={`vad-btn ${vadEnabled ? 'active' : ''}`}
               onClick={toggleVad}
