@@ -903,3 +903,21 @@ button:disabled {
   font-size: 0.82rem;
   margin-top: 10px;
 }
+
+/* ─── Narrow portrait: speed+silence above buttons ──────────────────────── */
+@media (max-width: 440px) {
+  .controls-row {
+    flex-wrap: wrap;
+    justify-content: center;
+  }
+
+  .controls-left {
+    flex-basis: 100%;
+    flex-direction: row;
+    justify-content: center;
+    align-items: center;
+    gap: 12px;
+    padding-bottom: 4px;
+    border-bottom: 1px solid var(--surface0);
+  }
+}
