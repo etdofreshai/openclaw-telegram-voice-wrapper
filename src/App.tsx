@@ -159,6 +159,7 @@ export default function App() {
   const recordingStartRef = useRef(0)
   const cancelRecordingRef = useRef(false)
   const isStoppingRef = useRef(false)
+  const touchActiveRef = useRef(false)
   const audioQueueRef = useRef<string[]>([])
   const ttsAudioRef = useRef<HTMLAudioElement | null>(null)
   const ttsPlayingRef = useRef(false)
@@ -634,7 +635,6 @@ export default function App() {
 
   const startManualRecording = useCallback(async () => {
     if (recordingCooldown || vadEnabled) return
-    isStoppingRef.current = false
     unlockAudio()
     unlockAudioCtx()
     // Pause playing audio while recording
@@ -1144,11 +1144,11 @@ export default function App() {
           <button
             className={`ptt-btn ${isRecording ? 'recording' : ''}`}
             disabled={recordingCooldown || vadEnabled}
-            onMouseDown={(e) => { e.preventDefault(); startManualRecording() }}
-            onMouseUp={() => { if (isRecording) stopManualRecording() }}
-            onMouseLeave={() => { if (isRecording) stopManualRecording() }}
-            onTouchStart={(e) => { e.preventDefault(); startManualRecording() }}
-            onTouchEnd={(e) => { e.preventDefault(); if (isRecording) stopManualRecording() }}
+            onMouseDown={(e) => { if (touchActiveRef.current) return; e.preventDefault(); startManualRecording() }}
+            onMouseUp={() => { if (touchActiveRef.current) return; if (isRecording) stopManualRecording() }}
+            onMouseLeave={() => { if (touchActiveRef.current) return; if (isRecording) stopManualRecording() }}
+            onTouchStart={(e) => { e.preventDefault(); touchActiveRef.current = true; startManualRecording() }}
+            onTouchEnd={(e) => { e.preventDefault(); if (isRecording) stopManualRecording(); setTimeout(() => { touchActiveRef.current = false }, 1000) }}
             onContextMenu={(e) => e.preventDefault()}
             title="Hold to talk"
           >
