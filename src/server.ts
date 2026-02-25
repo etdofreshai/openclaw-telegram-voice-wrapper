@@ -3,26 +3,21 @@ import multer from 'multer';
 import { WebSocketServer, WebSocket } from 'ws';
 import { createServer } from 'http';
 import dotenv from 'dotenv';
-import OpenAI from 'openai';
 import fs from 'fs';
-import path from 'path';
-import os from 'os';
 import { fileURLToPath } from 'url';
 import { dirname, join } from 'path';
 import { TelegramClient } from 'telegram';
 import { StringSession } from 'telegram/sessions/index.js';
 import { NewMessage, NewMessageEvent } from 'telegram/events/index.js';
+import { CustomFile } from 'telegram/client/uploads.js';
 
 dotenv.config();
 
 const PORT = parseInt(process.env.BACKEND_PORT || process.env.PORT || '3001');
-const OPENAI_API_KEY = process.env.OPENAI_API_KEY || '';
 const TELEGRAM_API_ID = parseInt(process.env.TELEGRAM_API_ID || '0');
 const TELEGRAM_API_HASH = process.env.TELEGRAM_API_HASH || '';
 const TELEGRAM_SESSION_STRING = process.env.TELEGRAM_SESSION_STRING || '';
 const TELEGRAM_TARGET_CHAT_ID_RAW = process.env.TELEGRAM_TARGET_CHAT_ID || '';
-
-const openai = new OpenAI({ apiKey: OPENAI_API_KEY });
 
 // ─── Telegram client ──────────────────────────────────────────────────────────
 
@@ -145,47 +140,31 @@ const upload = multer({
   limits: { fileSize: 25 * 1024 * 1024 },
 });
 
-// ── POST /api/stt — Whisper speech-to-text ────────────────────────────────────
-app.post('/api/stt', upload.single('audio'), async (req, res) => {
+// ── POST /api/send-voice — Send audio as Telegram voice note ──────────────────
+app.post('/api/send-voice', upload.single('audio'), async (req, res) => {
   try {
     if (!req.file) return res.status(400).json({ error: 'No audio file' }) as unknown as void;
-
-    const tmpPath = path.join(os.tmpdir(), `tg_voice_stt_${Date.now()}.webm`);
-    fs.writeFileSync(tmpPath, req.file.buffer);
-
-    try {
-      const transcription = await openai.audio.transcriptions.create({
-        file: fs.createReadStream(tmpPath) as Parameters<typeof openai.audio.transcriptions.create>[0]['file'],
-        model: 'whisper-1',
-      });
-      res.json({ text: transcription.text });
-    } finally {
-      try { fs.unlinkSync(tmpPath); } catch { /* ignore */ }
-    }
-  } catch (err: unknown) {
-    const msg = err instanceof Error ? err.message : String(err);
-    console.error('[STT] Error:', msg);
-    res.status(500).json({ error: msg });
-  }
-});
-
-// ── POST /api/send — Send message via Telegram MTProto ────────────────────────
-app.post('/api/send', async (req, res) => {
-  try {
-    const { message } = req.body as { message?: string };
-    if (!message) return res.status(400).json({ error: 'No message' }) as unknown as void;
 
     if (!telegramClient || !telegramConnected) {
       return res.status(503).json({ error: 'Telegram not connected. Check server logs.' }) as unknown as void;
     }
 
     const targetChatId = parseChatId(TELEGRAM_TARGET_CHAT_ID_RAW);
-    await telegramClient.sendMessage(targetChatId as Parameters<typeof telegramClient.sendMessage>[0], { message });
-    console.log(`[Telegram] Sent: "${message.slice(0, 80)}..."`);
+    const buffer = Buffer.from(req.file.buffer);
+
+    await telegramClient.sendFile(
+      targetChatId as Parameters<typeof telegramClient.sendFile>[0],
+      {
+        file: new CustomFile('voice.ogg', buffer.length, '', buffer),
+        voiceNote: true,
+      }
+    );
+
+    console.log(`[Telegram] Sent voice note: ${buffer.length} bytes`);
     res.json({ ok: true });
   } catch (err: unknown) {
     const msg = err instanceof Error ? err.message : String(err);
-    console.error('[Send] Error:', msg);
+    console.error('[Send Voice] Error:', msg);
     res.status(500).json({ error: msg });
   }
 });
@@ -230,6 +209,5 @@ connectTelegram().catch(console.error);
 
 server.listen(PORT, () => {
   console.log(`[Server] Backend running on http://localhost:${PORT}`);
-  console.log(`[Server] OPENAI_API_KEY: ${OPENAI_API_KEY ? '✓ set' : '✗ missing'}`);
   console.log(`[Server] TELEGRAM_TARGET_CHAT_ID: ${TELEGRAM_TARGET_CHAT_ID_RAW || '(not set)'}`);
 });

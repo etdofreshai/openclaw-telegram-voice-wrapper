@@ -2,13 +2,13 @@ import { useEffect, useRef, useState, useCallback } from 'react'
 import { VAD } from './vad'
 import {
   soundRecordStart, soundRecordStop, soundSendSuccess, soundError,
-  startTranscribingSound, stopTranscribingSound, soundVadSpeechStart,
+  soundVadSpeechStart,
   soundVadListening, soundTooShort, soundCalibrationBeep, unlockAudioCtx,
 } from './sounds'
 
 const BASE = import.meta.env.BASE_URL
 
-type AppStatus = 'idle' | 'listening' | 'recording' | 'transcribing' | 'waiting' | 'playing'
+type AppStatus = 'idle' | 'listening' | 'recording' | 'waiting' | 'playing'
 
 interface Message {
   role: 'user' | 'assistant'
@@ -21,7 +21,6 @@ const STATUS_LABELS: Record<AppStatus, string> = {
   idle: '⏸ Idle',
   listening: '👂 Listening...',
   recording: '🔴 Recording...',
-  transcribing: '✏️ Transcribing...',
   waiting: '⏳ Waiting for response...',
   playing: '🔊 Playing response...',
 }
@@ -30,7 +29,6 @@ const STATUS_ICONS: Record<AppStatus, string> = {
   idle: '⏸',
   listening: '👂',
   recording: '🔴',
-  transcribing: '✏️',
   waiting: '⏳',
   playing: '🔊',
 }
@@ -59,7 +57,6 @@ export default function App() {
   const [micActivated, setMicActivated] = useState(false)
   const [recordingCooldown, setRecordingCooldown] = useState(false)
   const [ttsPlaying, setTtsPlaying] = useState(false)
-  const [isTranscribing, setIsTranscribing] = useState(false)
 
   // Refs for non-reactive state
   const wsRef = useRef<WebSocket | null>(null)
@@ -67,7 +64,6 @@ export default function App() {
   const mediaRecorderRef = useRef<MediaRecorder | null>(null)
   const audioChunksRef = useRef<Blob[]>([])
   const recordingStartRef = useRef(0)
-  const sttAbortRef = useRef<AbortController | null>(null)
   const cancelRecordingRef = useRef(false)
   const audioQueueRef = useRef<string[]>([])
   const ttsAudioRef = useRef<HTMLAudioElement | null>(null)
@@ -331,7 +327,7 @@ export default function App() {
 
   // ─── Recording ───────────────────────────────────────────────────────────
   function getSupportedMimeType(): string {
-    const types = ['audio/webm;codecs=opus', 'audio/webm', 'audio/ogg;codecs=opus', 'audio/mp4']
+    const types = ['audio/ogg;codecs=opus', 'audio/webm;codecs=opus', 'audio/webm', 'audio/mp4']
     for (const t of types) { if (MediaRecorder.isTypeSupported(t)) return t }
     return 'audio/webm'
   }
@@ -366,7 +362,7 @@ export default function App() {
   const vadStopRecording = useCallback(() => {
     const mr = mediaRecorderRef.current
     if (!mr || mr.state === 'inactive') return
-    setStatus('transcribing')
+    setStatus('waiting')
     soundRecordStop()
     const captured = mr
     setTimeout(() => {
@@ -402,7 +398,7 @@ export default function App() {
   const stopManualRecording = useCallback(() => {
     const mr = mediaRecorderRef.current
     if (!mr || mr.state === 'inactive') return
-    setStatus('transcribing')
+    setStatus('waiting')
     soundRecordStop()
     const captured = mr
     setTimeout(() => {
@@ -427,71 +423,25 @@ export default function App() {
     setRecordingCooldown(true)
     setTimeout(() => setRecordingCooldown(false), 500)
 
-    const blob = new Blob(chunks, { type: 'audio/webm' })
+    const blob = new Blob(chunks, { type: getSupportedMimeType() })
     handleRecordingPipeline(blob)
   }, [vadEnabled])
 
   const handleRecordingPipeline = useCallback(async (blob: Blob) => {
     try {
-      // 1. Whisper STT
-      setIsTranscribing(true)
-      const ctrl = new AbortController()
-      sttAbortRef.current = ctrl
-      startTranscribingSound()
-
-      const formData = new FormData()
-      formData.append('audio', blob, 'recording.webm')
-
-      const sttRes = await fetch(`${BASE}api/stt`, {
-        method: 'POST',
-        body: formData,
-        signal: ctrl.signal,
-      })
-      stopTranscribingSound()
-      setIsTranscribing(false)
-      sttAbortRef.current = null
-
-      if (!sttRes.ok) throw new Error(`STT failed: ${sttRes.statusText}`)
-      const { text: userText } = await sttRes.json()
-
-      if (!userText?.trim()) {
-        // Empty transcription — resume
-        if (vadRef.current && vadEnabled) {
-          vadRef.current.resume()
-          setStatus('listening')
-          soundVadListening()
-        } else {
-          setStatus('idle')
-        }
-        return
-      }
-
-      // Require ≥6 words to filter noise/TV pickup
-      const wordCount = userText.trim().split(/\s+/).length
-      if (wordCount < 6) {
-        console.log(`Short transcription (${wordCount} words), discarding: "${userText}"`)
-        soundTooShort()
-        if (vadRef.current && vadEnabled) {
-          vadRef.current.resume()
-          setStatus('listening')
-          soundVadListening()
-        } else {
-          setStatus('idle')
-        }
-        return
-      }
-
-      // 2. Add user message to conversation
+      // 1. Add user voice message to conversation
       const userAudioUrl = URL.createObjectURL(blob)
-      addMessage({ role: 'user', text: userText, audioUrl: userAudioUrl, timestamp: Date.now() })
+      addMessage({ role: 'user', text: 'Voice message', audioUrl: userAudioUrl, timestamp: Date.now() })
       setStatus('waiting')
       soundSendSuccess()
 
-      // 3. Send via Telegram MTProto
-      const sendRes = await fetch(`${BASE}api/send`, {
+      // 2. Send audio directly as Telegram voice note
+      const formData = new FormData()
+      formData.append('audio', blob, 'voice.ogg')
+
+      const sendRes = await fetch(`${BASE}api/send-voice`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ message: userText }),
+        body: formData,
       })
 
       if (!sendRes.ok) {
@@ -502,17 +452,10 @@ export default function App() {
       // Response will arrive via WebSocket as a voice message
       // Status stays 'waiting' until voice arrives and playback begins
     } catch (err: unknown) {
-      if (err instanceof Error && err.name === 'AbortError') {
-        console.log('STT cancelled')
-      } else {
-        const msg = err instanceof Error ? err.message : String(err)
-        console.error('Pipeline error:', msg)
-        soundError()
-        addMessage({ role: 'assistant', text: `❌ Error: ${msg}`, timestamp: Date.now() })
-      }
-      setIsTranscribing(false)
-      sttAbortRef.current = null
-      stopTranscribingSound()
+      const msg = err instanceof Error ? err.message : String(err)
+      console.error('Pipeline error:', msg)
+      soundError()
+      addMessage({ role: 'assistant', text: `Error: ${msg}`, timestamp: Date.now() })
 
       if (vadRef.current && vadEnabled) {
         vadRef.current.resume()
@@ -743,28 +686,6 @@ export default function App() {
               onClick={() => { unlockAudio(); unlockAudioCtx(); startMeter() }}
             >
               👂
-            </button>
-          )}
-
-          {isTranscribing && (
-            <button
-              className="btn"
-              title="Cancel transcription"
-              onClick={() => {
-                sttAbortRef.current?.abort()
-                setIsTranscribing(false)
-                sttAbortRef.current = null
-                stopTranscribingSound()
-                if (vadRef.current && vadEnabled) {
-                  vadRef.current.resume()
-                  setStatus('listening')
-                  soundVadListening()
-                } else {
-                  setStatus('idle')
-                }
-              }}
-            >
-              ✕
             </button>
           )}
 
