@@ -960,12 +960,27 @@ export default function App() {
   return (
     <div className="app">
       <header>
-        <div className="header-avatar">
-          {selectedChatId ? chatTitle.charAt(0).toUpperCase() : '📱'}
-          <span className={`online-dot ${wsConnected && telegramConnected ? 'online' : ''}`} />
+        {/* Left: back button (returns to chat picker) */}
+        <div className="header-left">
+          {selectedChatId ? (
+            <button
+              className="header-back-btn"
+              onClick={() => { setSelectedChatId(null); fetchDialogs(false) }}
+              title="Switch chat"
+            >
+              ‹
+              {audioQueueLen > 0 && <span className="back-badge">{audioQueueLen}</span>}
+            </button>
+          ) : (
+            <div className="header-back-placeholder" />
+          )}
         </div>
-        <div className="header-info">
-          <h1>{selectedChatId ? chatTitle : 'OpenClaw Voice'}</h1>
+
+        {/* Center: title + subtitle */}
+        <div className="header-center">
+          <h1>
+            🎤 {selectedChatId ? chatTitle : 'OpenClaw Voice'}
+          </h1>
           <div className="subtitle">
             {!wsConnected
               ? 'connecting...'
@@ -976,18 +991,14 @@ export default function App() {
                   : 'select a chat to start'}
           </div>
         </div>
-        {selectedChatId && (
-          <button
-            className="header-btn"
-            onClick={() => { setSelectedChatId(null); fetchDialogs(false) }}
-            title="Switch chat"
-          >
-            ↩
-          </button>
-        )}
-        {audioQueueLen > 0 && (
-          <span className="queue-badge">{audioQueueLen}</span>
-        )}
+
+        {/* Right: avatar circle */}
+        <div className="header-right">
+          <div className="header-avatar">
+            {selectedChatId ? chatTitle.charAt(0).toUpperCase() : '📱'}
+            <span className={`online-dot ${wsConnected && telegramConnected ? 'online' : ''}`} />
+          </div>
+        </div>
       </header>
 
       {/* Chat picker — shown when Telegram is connected but no chat selected */}

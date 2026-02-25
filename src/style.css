@@ -57,36 +57,97 @@ body {
 
 /* ─── Header (Telegram-style) ─────────────────────────────────────────── */
 header {
-  padding: 8px 16px;
+  padding: 8px 12px;
   background: var(--mantle);
   border-bottom: 1px solid rgba(255, 255, 255, 0.06);
   flex-shrink: 0;
+  display: grid;
+  grid-template-columns: 52px 1fr 52px;
+  align-items: center;
+}
+
+/* ─── Header left: back button ───────────────────────────────────────── */
+.header-left {
   display: flex;
   align-items: center;
-  gap: 12px;
+  justify-content: flex-start;
+}
+
+.header-back-btn {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  background: transparent;
+  border: none;
+  color: var(--blue);
+  font-size: 1.6rem;
+  line-height: 1;
+  padding: 4px 6px;
+  border-radius: 8px;
+  cursor: pointer;
+}
+
+.header-back-btn:hover {
+  background: var(--surface0);
+}
+
+.back-badge {
+  font-size: 0.85rem;
+  font-weight: 600;
+  color: var(--blue);
+  line-height: 1;
+}
+
+/* ─── Header center: title + subtitle ────────────────────────────────── */
+.header-center {
+  text-align: center;
+  min-width: 0;
+}
+
+.header-center h1 {
+  font-size: 0.95rem;
+  font-weight: 600;
+  color: var(--text);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.header-center .subtitle {
+  font-size: 0.72rem;
+  color: var(--subtext0);
+  margin-top: 1px;
+}
+
+/* ─── Header right: avatar ───────────────────────────────────────────── */
+.header-right {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
 }
 
 .header-avatar {
-  width: 42px;
-  height: 42px;
+  width: 38px;
+  height: 38px;
   border-radius: 50%;
   background: var(--mauve);
   display: flex;
   align-items: center;
   justify-content: center;
-  font-size: 1.1rem;
+  font-size: 1rem;
   font-weight: 600;
   color: #fff;
   flex-shrink: 0;
   position: relative;
+  cursor: pointer;
 }
 
 .online-dot {
   position: absolute;
   bottom: 0;
   right: 0;
-  width: 12px;
-  height: 12px;
+  width: 10px;
+  height: 10px;
   border-radius: 50%;
   border: 2px solid var(--mantle);
   background: var(--overlay0);
@@ -95,44 +156,6 @@ header {
 
 .online-dot.online {
   background: var(--green);
-}
-
-.header-info {
-  flex: 1;
-  min-width: 0;
-}
-
-.header-info h1 {
-  font-size: 1rem;
-  font-weight: 600;
-  color: var(--text);
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-
-.header-info .subtitle {
-  font-size: 0.75rem;
-  color: var(--subtext0);
-  margin-top: 1px;
-}
-
-.header-btn {
-  width: 40px;
-  height: 40px;
-  border-radius: 50%;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  font-size: 1.2rem;
-  background: transparent;
-  color: var(--subtext0);
-  flex-shrink: 0;
-}
-
-.header-btn:hover {
-  background: var(--surface0);
-  color: var(--text);
 }
 
 /* ─── Conversation ────────────────────────────────────────────────────── */
