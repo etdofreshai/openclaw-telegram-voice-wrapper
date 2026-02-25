@@ -648,6 +648,14 @@ export default function App() {
 
   const startManualRecording = useCallback(async () => {
     if (recordingCooldown || vadEnabled) return
+    // If mic not yet activated, just request permission and wait — don't try to record
+    // (getUserMedia async + permission prompt would leave state broken on release)
+    if (!meterStartedRef.current) {
+      unlockAudio()
+      unlockAudioCtx()
+      startMeter()
+      return
+    }
     unlockAudio()
     unlockAudioCtx()
     // Pause playing audio while recording
@@ -669,7 +677,7 @@ export default function App() {
       console.error('Mic error:', err)
       alert('Could not access microphone.')
     }
-  }, [recordingCooldown, vadEnabled, unlockAudio, updateStatus])
+  }, [recordingCooldown, vadEnabled, unlockAudio, updateStatus, startMeter])
 
   const stopManualRecording = useCallback(() => {
     if (isStoppingRef.current) return  // guard against double-fire (touch + synthetic mouse events)
