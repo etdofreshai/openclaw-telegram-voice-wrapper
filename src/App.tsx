@@ -1119,7 +1119,23 @@ export default function App() {
             </div>
           </div>
 
-          {/* Hold-to-talk (dead center) */}
+          {/* Status - left of PTT */}
+          <div className={`status-indicator ${status}`}>
+            {STATUS_ICONS[status]} {STATUS_LABELS[status]}
+          </div>
+
+          {!micActivated && (
+            <button
+              className="btn"
+              id="activateBtn"
+              title="Activate microphone"
+              onClick={() => { unlockAudio(); unlockAudioCtx(); startMeter() }}
+            >
+              👂
+            </button>
+          )}
+
+          {/* Hold-to-talk (center) */}
           <button
             className={`ptt-btn ${isRecording ? 'recording' : ''}`}
             disabled={recordingCooldown || vadEnabled}
@@ -1133,23 +1149,8 @@ export default function App() {
             🎙️
           </button>
 
-          {/* Right group */}
+          {/* Right group — two buttons */}
           <div className="controls-right">
-            <div className={`status-indicator ${status}`}>
-              {STATUS_ICONS[status]} {STATUS_LABELS[status]}
-            </div>
-
-            {!micActivated && (
-              <button
-                className="btn"
-                id="activateBtn"
-                title="Activate microphone"
-                onClick={() => { unlockAudio(); unlockAudioCtx(); startMeter() }}
-              >
-                👂
-              </button>
-            )}
-
             <button
               className={`vad-btn ${vadEnabled ? 'active' : ''}`}
               onClick={toggleVad}
