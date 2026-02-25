@@ -17,7 +17,7 @@ COPY --from=build /app/dist ./dist
 COPY src/ ./src/
 COPY tsconfig.json ./
 
-ENV FRONTEND_PORT=3000
+ENV FRONTEND_PORT=5173
 ENV BACKEND_PORT=3001
 
 CMD ["npx", "tsx", "src/server.ts"]

@@ -24,7 +24,7 @@ function autoBackend(): Plugin {
 }
 
 const backendPort = process.env.BACKEND_PORT || '3001'
-const frontendPort = parseInt(process.env.FRONTEND_PORT || '3000')
+const frontendPort = parseInt(process.env.FRONTEND_PORT || '5173')
 
 export default defineConfig({
   plugins: [react(), autoBackend()],
