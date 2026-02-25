@@ -1143,7 +1143,7 @@ export default function App() {
             onMouseUp={() => { if (isRecording) stopManualRecording() }}
             onMouseLeave={() => { if (isRecording) stopManualRecording() }}
             onTouchStart={(e) => { e.preventDefault(); startManualRecording() }}
-            onTouchEnd={() => { if (isRecording) stopManualRecording() }}
+            onTouchEnd={(e) => { e.preventDefault(); if (isRecording) stopManualRecording() }}
             onContextMenu={(e) => e.preventDefault()}
             title="Hold to talk"
           >
