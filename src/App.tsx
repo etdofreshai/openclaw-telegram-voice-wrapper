@@ -1117,23 +1117,21 @@ export default function App() {
                 </button>
               ))}
             </div>
+            {/* Status lives in left group so PTT stays centered */}
+            <div className={`status-indicator ${status}`}>
+              {STATUS_ICONS[status]} {STATUS_LABELS[status]}
+            </div>
+            {!micActivated && (
+              <button
+                className="btn"
+                id="activateBtn"
+                title="Activate microphone"
+                onClick={() => { unlockAudio(); unlockAudioCtx(); startMeter() }}
+              >
+                👂
+              </button>
+            )}
           </div>
-
-          {/* Status - left of PTT */}
-          <div className={`status-indicator ${status}`}>
-            {STATUS_ICONS[status]} {STATUS_LABELS[status]}
-          </div>
-
-          {!micActivated && (
-            <button
-              className="btn"
-              id="activateBtn"
-              title="Activate microphone"
-              onClick={() => { unlockAudio(); unlockAudioCtx(); startMeter() }}
-            >
-              👂
-            </button>
-          )}
 
           {/* Hold-to-talk (center) */}
           <button
