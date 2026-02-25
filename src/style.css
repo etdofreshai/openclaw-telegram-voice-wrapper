@@ -955,3 +955,11 @@ button:disabled {
     display: none;
   }
 }
+
+/* ─── Error messages ─────────────────────────────────────────────────────── */
+.bubble.error-bubble {
+  background: rgba(243, 139, 168, 0.15);
+  border: 1px solid var(--red);
+  color: var(--red);
+  font-size: 0.82rem;
+}

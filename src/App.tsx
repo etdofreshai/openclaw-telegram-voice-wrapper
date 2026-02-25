@@ -19,6 +19,7 @@ interface Message {
   timestamp: number
   quotedText?: string
   messageId?: number
+  isError?: boolean
 }
 
 interface TelegramDialog {
@@ -259,6 +260,12 @@ export default function App() {
     a.playbackRate = playbackSpeedRef.current
     a.play().catch((e) => {
       console.warn('Audio play failed:', e)
+      setMessages((prev) => [...prev, {
+        role: 'assistant',
+        text: `⚠️ Audio playback failed: ${(e as Error)?.message || e}`,
+        timestamp: Date.now(),
+        isError: true,
+      }])
       ttsPlayingRef.current = false
       setTtsPlaying(false)
       playNextInQueue()
@@ -377,8 +384,14 @@ export default function App() {
       enqueueAudio(url)
     } catch (e) {
       console.error('Error handling incoming voice:', e)
+      setMessages((prev) => [...prev, {
+        role: 'assistant',
+        text: `⚠️ Failed to load voice message: ${(e as Error)?.message || e}`,
+        timestamp: Date.now(),
+        isError: true,
+      }])
     }
-  }, [enqueueAudio])
+  }, [enqueueAudio, setMessages])
 
   const addMessage = useCallback((msg: Message) => {
     setMessages((prev) => [...prev, msg])
@@ -1049,8 +1062,8 @@ export default function App() {
           const showSender = m.role === 'assistant' && (i === 0 || messages[i - 1].role !== 'assistant')
           const timeStr = new Date(m.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
           return (
-            <div key={i} className={`message ${m.role}`}>
-              <div className="bubble">
+            <div key={i} className={`message ${m.role}${m.isError ? ' error' : ''}`}>
+              <div className={`bubble${m.isError ? ' error-bubble' : ''}`}>
                 {showSender && <div className="sender-name">{chatTitle}</div>}
                 {m.quotedText && <div className="quote-inline">{m.quotedText.trim()}</div>}
                 {m.text && (
