@@ -158,6 +158,7 @@ export default function App() {
   const audioChunksRef = useRef<Blob[]>([])
   const recordingStartRef = useRef(0)
   const cancelRecordingRef = useRef(false)
+  const isStoppingRef = useRef(false)
   const audioQueueRef = useRef<string[]>([])
   const ttsAudioRef = useRef<HTMLAudioElement | null>(null)
   const ttsPlayingRef = useRef(false)
@@ -633,6 +634,7 @@ export default function App() {
 
   const startManualRecording = useCallback(async () => {
     if (recordingCooldown || vadEnabled) return
+    isStoppingRef.current = false
     unlockAudio()
     unlockAudioCtx()
     // Pause playing audio while recording
@@ -657,13 +659,16 @@ export default function App() {
   }, [recordingCooldown, vadEnabled, unlockAudio, updateStatus])
 
   const stopManualRecording = useCallback(() => {
+    if (isStoppingRef.current) return  // guard against double-fire (touch + synthetic mouse events)
     const mr = mediaRecorderRef.current
     if (!mr || mr.state === 'inactive') return
+    isStoppingRef.current = true
     updateStatus('waiting')
     soundRecordStop()
     const captured = mr
     setTimeout(() => {
       if (captured.state !== 'inactive') captured.stop()
+      isStoppingRef.current = false
     }, 500)
   }, [updateStatus])
 
