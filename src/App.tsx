@@ -376,6 +376,10 @@ export default function App() {
 
   const handleIncomingVoice = useCallback((audioData: string, messageId: number, text?: string, quotedText?: string) => {
     try {
+      // Voice arrived — clear typing indicator immediately (don't wait for typing_stop)
+      if (typingTimeoutRef.current) clearTimeout(typingTimeoutRef.current)
+      setTypingAction(null)
+
       // Decode base64 OGG → Blob URL
       const bytes = Uint8Array.from(atob(audioData), (c) => c.charCodeAt(0))
       const blob = new Blob([bytes], { type: 'audio/ogg' })
@@ -402,7 +406,7 @@ export default function App() {
         isError: true,
       }])
     }
-  }, [enqueueAudio, setMessages])
+  }, [enqueueAudio, setMessages, setTypingAction])
 
   const addMessage = useCallback((msg: Message) => {
     setMessages((prev) => [...prev, msg])
