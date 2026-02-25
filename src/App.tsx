@@ -978,9 +978,7 @@ export default function App() {
 
         {/* Center: title + subtitle */}
         <div className="header-center">
-          <h1>
-            🎤 {selectedChatId ? chatTitle : 'OpenClaw Voice'}
-          </h1>
+          <h1>{selectedChatId ? chatTitle : 'OpenClaw Voice'}</h1>
           <div className="subtitle">
             {!wsConnected
               ? 'connecting...'
