@@ -106,6 +106,10 @@ export class VAD {
   /** Manually set the effective threshold (moves the delta, keeps noise floor) */
   setEffectiveThreshold(value: number): void { this.threshold = Math.max(0.001, value - this.noiseFloor); }
 
+  /** Set silence duration before speech end triggers */
+  setSilenceMs(ms: number): void { this.silenceMs = ms; }
+  getSilenceMs(): number { return this.silenceMs; }
+
   /** Calibrate: measure ambient noise for given duration */
   async calibrate(durationMs = 3000): Promise<number> {
     if (!this.analyser || !this.dataArray) throw new Error('VAD not started');

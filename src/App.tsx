@@ -1,4 +1,6 @@
 import { useEffect, useRef, useState, useCallback } from 'react'
+import ReactMarkdown from 'react-markdown'
+import remarkGfm from 'remark-gfm'
 import { VAD } from './vad'
 import {
   soundRecordStart, soundRecordStop, soundSendSuccess, soundError,
@@ -15,14 +17,29 @@ interface Message {
   text: string
   audioUrl?: string
   timestamp: number
+  quotedText?: string
+  messageId?: number
+}
+
+interface TelegramDialog {
+  id: string
+  name: string
+  title: string
+  isUser: boolean
+  isGroup: boolean
+  isChannel: boolean
+  unreadCount: number
+  pinned: boolean
+  archived: boolean
+  lastMessage: string
 }
 
 const STATUS_LABELS: Record<AppStatus, string> = {
-  idle: '⏸ Idle',
-  listening: '👂 Listening...',
-  recording: '🔴 Recording...',
-  waiting: '⏳ Waiting for response...',
-  playing: '🔊 Playing response...',
+  idle: 'Idle',
+  listening: 'Listening...',
+  recording: 'Recording...',
+  waiting: 'Waiting...',
+  playing: 'Playing...',
 }
 
 const STATUS_ICONS: Record<AppStatus, string> = {
@@ -43,6 +60,63 @@ const CALIBRATION_PHRASES = [
 const THRESH_MAX = 0.12
 
 export default function App() {
+  // ─── Auth gate ────────────────────────────────────────────────────────────
+  const [authChecked, setAuthChecked] = useState(false)
+  const [authRequired, setAuthRequired] = useState(false)
+  const [authenticated, setAuthenticated] = useState(false)
+  const [authPassword, setAuthPassword] = useState('')
+  const [authError, setAuthError] = useState('')
+
+  useEffect(() => {
+    fetch(`${BASE}api/auth-required`)
+      .then((r) => r.json())
+      .then((data) => {
+        setAuthRequired(data.required)
+        if (!data.required) {
+          setAuthenticated(true)
+        } else {
+          // Check localStorage for saved auth
+          const saved = localStorage.getItem('voice-auth-token')
+          if (saved) {
+            fetch(`${BASE}api/auth`, {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ password: saved }),
+            })
+              .then((r) => r.json())
+              .then((d) => { if (d.ok) setAuthenticated(true) })
+              .catch(() => { /* needs manual entry */ })
+          }
+        }
+        setAuthChecked(true)
+      })
+      .catch(() => {
+        // If server is down, skip auth
+        setAuthChecked(true)
+        setAuthenticated(true)
+      })
+  }, [])
+
+  const handleAuth = useCallback(async () => {
+    setAuthError('')
+    try {
+      const res = await fetch(`${BASE}api/auth`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ password: authPassword }),
+      })
+      const data = await res.json()
+      if (data.ok) {
+        localStorage.setItem('voice-auth-token', authPassword)
+        setAuthenticated(true)
+      } else {
+        setAuthError(data.error || 'Wrong password')
+      }
+    } catch {
+      setAuthError('Connection failed')
+    }
+  }, [authPassword])
+
   const [messages, setMessages] = useState<Message[]>([])
   const [status, setStatus] = useState<AppStatus>('idle')
   const [wsConnected, setWsConnected] = useState(false)
@@ -57,6 +131,25 @@ export default function App() {
   const [micActivated, setMicActivated] = useState(false)
   const [recordingCooldown, setRecordingCooldown] = useState(false)
   const [ttsPlaying, setTtsPlaying] = useState(false)
+  const [playbackSpeed, setPlaybackSpeed] = useState(() => {
+    try { return parseFloat(localStorage.getItem('voice-playback-speed') || '1') || 1 }
+    catch { return 1 }
+  })
+  const [vadSilenceMs, setVadSilenceMs] = useState(() => {
+    try { return parseInt(localStorage.getItem('vad-silence-ms') || '2000') || 2000 }
+    catch { return 2000 }
+  })
+
+  // Typing indicator
+  const [typingAction, setTypingAction] = useState<string | null>(null)
+  const typingTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+
+  // Chat selection
+  const [selectedChatId, setSelectedChatId] = useState<string | null>(null)
+  const [dialogs, setDialogs] = useState<TelegramDialog[]>([])
+  const [dialogsLoading, setDialogsLoading] = useState(false)
+  const [dialogSearch, setDialogSearch] = useState('')
+  const [historyLoading, setHistoryLoading] = useState(false)
 
   // Refs for non-reactive state
   const wsRef = useRef<WebSocket | null>(null)
@@ -73,10 +166,49 @@ export default function App() {
   const threshWrapRef = useRef<HTMLElement | null>(null)
   const threshHandleRef = useRef<HTMLElement | null>(null)
   const conversationRef = useRef<HTMLDivElement>(null)
+  const playbackSpeedRef = useRef(playbackSpeed)
+  const vadEnabledRef = useRef(vadEnabled)
+  const vadSilenceMsRef = useRef(vadSilenceMs)
 
-  // Keep statusRef in sync
-  useEffect(() => { statusRef.current = status }, [status])
+  // Auto-scroll to bottom and apply playback speed when messages change
+  useEffect(() => {
+    if (conversationRef.current && messages.length > 0) {
+      // Use setTimeout(0) to ensure DOM has painted the new messages
+      setTimeout(() => {
+        if (conversationRef.current) {
+          conversationRef.current.scrollTop = conversationRef.current.scrollHeight
+        }
+        document.querySelectorAll('.conversation audio').forEach((a) => {
+          (a as HTMLAudioElement).playbackRate = playbackSpeedRef.current
+        })
+      }, 0)
+    }
+  }, [messages])
+
+  // Synchronous status update — prevents race conditions where VAD callbacks
+  // read statusRef before a useEffect can sync it
+  const updateStatus = useCallback((s: AppStatus) => {
+    statusRef.current = s
+    setStatus(s)
+  }, [])
+
+  // Keep refs in sync
   useEffect(() => { ttsPlayingRef.current = ttsPlaying }, [ttsPlaying])
+  useEffect(() => { vadEnabledRef.current = vadEnabled }, [vadEnabled])
+  useEffect(() => {
+    vadSilenceMsRef.current = vadSilenceMs
+    localStorage.setItem('vad-silence-ms', String(vadSilenceMs))
+    if (vadRef.current) vadRef.current.setSilenceMs(vadSilenceMs)
+  }, [vadSilenceMs])
+  useEffect(() => {
+    playbackSpeedRef.current = playbackSpeed
+    localStorage.setItem('voice-playback-speed', String(playbackSpeed))
+    // Update all existing audio elements
+    document.querySelectorAll('.conversation audio').forEach((a) => {
+      (a as HTMLAudioElement).playbackRate = playbackSpeed
+    })
+    if (ttsAudioRef.current) ttsAudioRef.current.playbackRate = playbackSpeed
+  }, [playbackSpeed])
 
   // ─── Audio queue helpers ──────────────────────────────────────────────────
   const ensureTtsAudio = useCallback((): HTMLAudioElement => {
@@ -105,12 +237,12 @@ export default function App() {
       setTtsPlaying(false)
       setAudioQueueLen(0)
       // Re-arm VAD after queue is empty
-      if (vadRef.current && vadEnabled) {
+      if (vadRef.current && vadEnabledRef.current) {
         vadRef.current.resume()
         soundVadListening()
-        setStatus('listening')
+        updateStatus('listening')
       } else {
-        setStatus('idle')
+        updateStatus('idle')
       }
       return
     }
@@ -118,17 +250,18 @@ export default function App() {
     setAudioQueueLen(queue.length)
     ttsPlayingRef.current = true
     setTtsPlaying(true)
-    setStatus('playing')
+    updateStatus('playing')
     if (vadRef.current) vadRef.current.pause()
     const a = ensureTtsAudio()
     a.src = url
+    a.playbackRate = playbackSpeedRef.current
     a.play().catch((e) => {
       console.warn('Audio play failed:', e)
       ttsPlayingRef.current = false
       setTtsPlaying(false)
       playNextInQueue()
     })
-  }, [vadEnabled, ensureTtsAudio])
+  }, [ensureTtsAudio])
 
   const enqueueAudio = useCallback((url: string) => {
     audioQueueRef.current.push(url)
@@ -140,6 +273,13 @@ export default function App() {
 
   // ─── WebSocket ────────────────────────────────────────────────────────────
   const connectWs = useCallback(() => {
+    // Close existing connection to prevent duplicates
+    if (wsRef.current) {
+      wsRef.current.onclose = null
+      wsRef.current.close()
+      wsRef.current = null
+    }
+
     const protocol = location.protocol === 'https:' ? 'wss:' : 'ws:'
     const wsUrl = `${protocol}//${location.host}${BASE}ws`
     const ws = new WebSocket(wsUrl)
@@ -167,14 +307,42 @@ export default function App() {
           // handshake OK
         } else if (msg.type === 'status') {
           setTelegramConnected(!!msg.telegramConnected)
-        } else if (msg.type === 'voice') {
-          // Incoming voice OGG from Telegram
-          handleIncomingVoice(msg.audioData, msg.messageId)
-        } else if (msg.type === 'text') {
-          // Incoming text message (also push as assistant message for context)
-          if (msg.text && msg.text !== 'NO_REPLY' && msg.text !== 'HEARTBEAT_OK') {
-            addMessage({ role: 'assistant', text: msg.text, timestamp: msg.timestamp || Date.now() })
+          if (msg.chatId) {
+            setSelectedChatId(msg.chatId)
+            loadHistory()
           }
+        } else if (msg.type === 'chat_selected') {
+          setSelectedChatId(msg.chatId || null)
+        } else if (msg.type === 'voice') {
+          setTypingAction(null)
+          handleIncomingVoice(msg.audioData, msg.messageId, msg.text, msg.quotedText)
+        } else if (msg.type === 'text') {
+          setTypingAction(null)
+          const text = msg.text || ''
+          const quotedText = msg.quotedText || ''
+          if ((text || quotedText) && text !== 'NO_REPLY' && text !== 'HEARTBEAT_OK') {
+            upsertMessage(msg.messageId, { role: 'assistant', text, quotedText: quotedText || undefined, messageId: msg.messageId, timestamp: msg.timestamp || Date.now() })
+            // Resume VAD after text-only response (no voice to play)
+            if (statusRef.current === 'waiting' && vadRef.current && vadEnabledRef.current) {
+              vadRef.current.resume()
+              updateStatus('listening')
+              soundVadListening()
+            }
+          }
+        } else if (msg.type === 'text_update') {
+          setTypingAction(null)
+          const text = msg.text || ''
+          const quotedText = msg.quotedText || ''
+          if (text || quotedText) {
+            upsertMessage(msg.messageId, { role: 'assistant', text, quotedText: quotedText || undefined, messageId: msg.messageId, timestamp: msg.timestamp || Date.now() })
+          }
+        } else if (msg.type === 'typing') {
+          setTypingAction(msg.action || 'SendMessageTypingAction')
+          if (typingTimeoutRef.current) clearTimeout(typingTimeoutRef.current)
+          typingTimeoutRef.current = setTimeout(() => setTypingAction(null), 6000)
+        } else if (msg.type === 'typing_stop') {
+          setTypingAction(null)
+          if (typingTimeoutRef.current) clearTimeout(typingTimeoutRef.current)
         } else if (msg.type === 'telegram_connected') {
           setTelegramConnected(true)
         } else if (msg.type === 'telegram_disconnected') {
@@ -186,7 +354,7 @@ export default function App() {
     }
   }, [])
 
-  const handleIncomingVoice = useCallback((audioData: string, _messageId: number) => {
+  const handleIncomingVoice = useCallback((audioData: string, messageId: number, text?: string, quotedText?: string) => {
     try {
       // Decode base64 OGG → Blob URL
       const bytes = Uint8Array.from(atob(audioData), (c) => c.charCodeAt(0))
@@ -196,7 +364,9 @@ export default function App() {
       // Add message to conversation
       addMessage({
         role: 'assistant',
-        text: '🔊 Voice message',
+        text: text || '',
+        quotedText,
+        messageId,
         audioUrl: url,
         timestamp: Date.now(),
       })
@@ -210,13 +380,88 @@ export default function App() {
 
   const addMessage = useCallback((msg: Message) => {
     setMessages((prev) => [...prev, msg])
-    // Scroll to bottom
-    requestAnimationFrame(() => {
-      if (conversationRef.current) {
-        conversationRef.current.scrollTop = conversationRef.current.scrollHeight
+  }, [])
+
+  /** Upsert: update existing message by Telegram messageId, or append if new */
+  const upsertMessage = useCallback((messageId: number, msg: Message) => {
+    setMessages((prev) => {
+      const idx = prev.findIndex((m) => m.messageId === messageId)
+      if (idx >= 0) {
+        const updated = [...prev]
+        updated[idx] = { ...updated[idx], text: msg.text, quotedText: msg.quotedText }
+        return updated
       }
+      return [...prev, msg]
     })
   }, [])
+
+  // ─── Chat selection ─────────────────────────────────────────────────────
+  const fetchDialogs = useCallback(async (autoSelect = true) => {
+    setDialogsLoading(true)
+    try {
+      const res = await fetch(`${BASE}api/dialogs`)
+      if (!res.ok) throw new Error((await res.json()).error || res.statusText)
+      const data = await res.json()
+      setDialogs(data.dialogs)
+      if (autoSelect && data.currentChatId) setSelectedChatId(data.currentChatId)
+    } catch (err: unknown) {
+      console.error('Failed to fetch dialogs:', err instanceof Error ? err.message : err)
+    } finally {
+      setDialogsLoading(false)
+    }
+  }, [])
+
+  const loadHistory = useCallback(async () => {
+    setMessages([])
+    setHistoryLoading(true)
+    try {
+      const histRes = await fetch(`${BASE}api/messages?limit=20`)
+      if (histRes.ok) {
+        const data = await histRes.json()
+        const history: Message[] = (data.messages || []).map((m: { id: number; out: boolean; text: string; quotedText: string; audioData: string | null; date: number }) => {
+          const msg: Message = {
+            role: m.out ? 'user' : 'assistant',
+            text: m.text || '',
+            quotedText: m.quotedText || undefined,
+            messageId: m.id,
+            timestamp: m.date * 1000,
+          }
+          if (m.audioData) {
+            const bytes = Uint8Array.from(atob(m.audioData), (c) => c.charCodeAt(0))
+            const blob = new Blob([bytes], { type: 'audio/ogg' })
+            msg.audioUrl = URL.createObjectURL(blob)
+          }
+          return msg
+        })
+        setMessages(history)
+      }
+    } catch (histErr) {
+      console.error('Failed to fetch message history:', histErr)
+    } finally {
+      setHistoryLoading(false)
+    }
+  }, [])
+
+  const selectChat = useCallback(async (chatId: string) => {
+    try {
+      const res = await fetch(`${BASE}api/select-chat`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ chatId }),
+      })
+      if (!res.ok) throw new Error((await res.json()).error || res.statusText)
+      setSelectedChatId(chatId)
+      await loadHistory()
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : String(err)
+      console.error('Chat selection failed:', msg)
+    }
+  }, [loadHistory])
+
+  // Auto-fetch dialogs when Telegram connects
+  useEffect(() => {
+    if (telegramConnected) fetchDialogs()
+  }, [telegramConnected, fetchDialogs])
 
   // ─── Mic / Level meter ───────────────────────────────────────────────────
   const startMeter = useCallback(async () => {
@@ -271,16 +516,24 @@ export default function App() {
 
     if (vadEnabled) {
       setVadEnabled(false)
+      // Cancel any in-progress VAD recording
+      if (statusRef.current === 'recording') {
+        cancelRecordingRef.current = true
+        if (mediaRecorderRef.current?.state !== 'inactive') {
+          mediaRecorderRef.current?.stop()
+        }
+      }
       if (vadRef.current) { vadRef.current.stop(); vadRef.current = null }
-      if (statusRef.current === 'listening') setStatus('idle')
+      // Reset to idle unless audio is actively playing (let it finish)
+      if (statusRef.current !== 'playing') updateStatus('idle')
       return
     }
 
     setVadEnabled(true)
-    setStatus('listening')
+    updateStatus('listening')
 
     const vad = new VAD({
-      silenceMs: 2000,
+      silenceMs: vadSilenceMsRef.current,
       minSpeechMs: 1500,
       onSpeechStart: () => {
         if (!ttsPlayingRef.current && statusRef.current === 'listening') {
@@ -321,9 +574,9 @@ export default function App() {
       alert(`VAD failed: ${msg}`)
       setVadEnabled(false)
       vadRef.current = null
-      setStatus('idle')
+      updateStatus('idle')
     }
-  }, [vadEnabled, unlockAudio, startMeter])
+  }, [vadEnabled, unlockAudio, startMeter, updateStatus])
 
   // ─── Recording ───────────────────────────────────────────────────────────
   function getSupportedMimeType(): string {
@@ -355,20 +608,28 @@ export default function App() {
 
     mr.start()
     recordingStartRef.current = Date.now()
-    setStatus('recording')
+    updateStatus('recording')
     soundVadSpeechStart()
-  }, [])
+
+    // Safety timeout: force-stop recording after 30s to prevent stuck state
+    setTimeout(() => {
+      if (statusRef.current === 'recording' && mediaRecorderRef.current?.state !== 'inactive') {
+        console.warn('VAD recording safety timeout — force stopping')
+        vadStopRecording()
+      }
+    }, 30000)
+  }, [updateStatus])
 
   const vadStopRecording = useCallback(() => {
     const mr = mediaRecorderRef.current
     if (!mr || mr.state === 'inactive') return
-    setStatus('waiting')
+    updateStatus('waiting')
     soundRecordStop()
     const captured = mr
     setTimeout(() => {
       if (captured.state !== 'inactive') captured.stop()
     }, 500)
-  }, [])
+  }, [updateStatus])
 
   const startManualRecording = useCallback(async () => {
     if (recordingCooldown || vadEnabled) return
@@ -387,35 +648,35 @@ export default function App() {
       mr.onstop = () => { stream.getTracks().forEach((t) => t.stop()); processRecording() }
       mr.start()
       recordingStartRef.current = Date.now()
-      setStatus('recording')
+      updateStatus('recording')
       soundRecordStart()
     } catch (err) {
       console.error('Mic error:', err)
       alert('Could not access microphone.')
     }
-  }, [recordingCooldown, vadEnabled, unlockAudio])
+  }, [recordingCooldown, vadEnabled, unlockAudio, updateStatus])
 
   const stopManualRecording = useCallback(() => {
     const mr = mediaRecorderRef.current
     if (!mr || mr.state === 'inactive') return
-    setStatus('waiting')
+    updateStatus('waiting')
     soundRecordStop()
     const captured = mr
     setTimeout(() => {
       if (captured.state !== 'inactive') captured.stop()
     }, 500)
-  }, [])
+  }, [updateStatus])
 
   const processRecording = useCallback(async () => {
     const duration = Date.now() - recordingStartRef.current
     const chunks = audioChunksRef.current
     if (chunks.length === 0 || duration < 800) {
-      if (vadRef.current && vadEnabled) {
+      if (vadRef.current && vadEnabledRef.current) {
         vadRef.current.resume()
-        setStatus('listening')
+        updateStatus('listening')
         soundVadListening()
       } else {
-        setStatus('idle')
+        updateStatus('idle')
       }
       return
     }
@@ -425,14 +686,14 @@ export default function App() {
 
     const blob = new Blob(chunks, { type: getSupportedMimeType() })
     handleRecordingPipeline(blob)
-  }, [vadEnabled])
+  }, [updateStatus])
 
   const handleRecordingPipeline = useCallback(async (blob: Blob) => {
     try {
       // 1. Add user voice message to conversation
       const userAudioUrl = URL.createObjectURL(blob)
-      addMessage({ role: 'user', text: 'Voice message', audioUrl: userAudioUrl, timestamp: Date.now() })
-      setStatus('waiting')
+      addMessage({ role: 'user', text: '', audioUrl: userAudioUrl, timestamp: Date.now() })
+      updateStatus('waiting')
       soundSendSuccess()
 
       // 2. Send audio directly as Telegram voice note
@@ -457,15 +718,15 @@ export default function App() {
       soundError()
       addMessage({ role: 'assistant', text: `Error: ${msg}`, timestamp: Date.now() })
 
-      if (vadRef.current && vadEnabled) {
+      if (vadRef.current && vadEnabledRef.current) {
         vadRef.current.resume()
-        setStatus('listening')
+        updateStatus('listening')
         soundVadListening()
       } else {
-        setStatus('idle')
+        updateStatus('idle')
       }
     }
-  }, [vadEnabled, addMessage])
+  }, [addMessage, updateStatus])
 
   // ─── Calibration ─────────────────────────────────────────────────────────
   const startCalibration = useCallback(async () => {
@@ -553,24 +814,23 @@ export default function App() {
     threshHandleRef.current = handle
 
     let dragging = false
-    const getThresh = (clientX: number) => {
+    const applyThresh = (clientX: number) => {
       const rect = wrap.getBoundingClientRect()
       const pct = Math.max(0, Math.min(1, (clientX - rect.left) / rect.width))
-      return pct * THRESH_MAX
-    }
-    const applyThresh = (clientX: number) => {
-      const t = getThresh(clientX)
+      const t = pct * THRESH_MAX
       if (vadRef.current) vadRef.current.setEffectiveThreshold(t)
       else setVadThreshold(t)
-      const pct = Math.min(100, (t / THRESH_MAX) * 100)
-      handle.style.left = `${pct}%`
+      handle.style.left = `${Math.min(100, pct * 100)}%`
       const saved = JSON.parse(localStorage.getItem('telegram-voice-calibration') || '{}')
       saved.manualThreshold = t
       localStorage.setItem('telegram-voice-calibration', JSON.stringify(saved))
     }
 
-    handle.addEventListener('mousedown', () => { dragging = true })
-    handle.addEventListener('touchstart', (e) => { dragging = true; e.preventDefault() }, { passive: false })
+    // Click anywhere on the bar to jump threshold
+    const onBarDown = (e: MouseEvent) => { dragging = true; applyThresh(e.clientX) }
+    const onBarTouchStart = (e: TouchEvent) => { dragging = true; e.preventDefault(); applyThresh(e.touches[0].clientX) }
+    wrap.addEventListener('mousedown', onBarDown)
+    wrap.addEventListener('touchstart', onBarTouchStart, { passive: false })
     const onMove = (e: MouseEvent) => { if (dragging) applyThresh(e.clientX) }
     const onTouchMove = (e: TouchEvent) => { if (dragging) applyThresh(e.touches[0].clientX) }
     const onUp = () => { dragging = false }
@@ -580,17 +840,29 @@ export default function App() {
     document.addEventListener('touchend', onUp)
 
     return () => {
+      wrap.removeEventListener('mousedown', onBarDown)
+      wrap.removeEventListener('touchstart', onBarTouchStart)
       document.removeEventListener('mousemove', onMove)
       document.removeEventListener('touchmove', onTouchMove)
       document.removeEventListener('mouseup', onUp)
       document.removeEventListener('touchend', onUp)
     }
-  })
+  }, [selectedChatId])
 
-  // ─── Init ─────────────────────────────────────────────────────────────────
+  // ─── Init: WebSocket (stable, runs once) ─────────────────────────────────
   useEffect(() => {
     connectWs()
-    // Keyboard: Space to toggle PTT
+    return () => {
+      if (wsRef.current) {
+        wsRef.current.onclose = null
+        wsRef.current.close()
+        wsRef.current = null
+      }
+    }
+  }, [connectWs])
+
+  // ─── Init: Keyboard handler ────────────────────────────────────────────────
+  useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       if (e.code === 'Space' && !e.repeat && !vadEnabled && document.activeElement?.tagName !== 'INPUT') {
         e.preventDefault()
@@ -600,7 +872,7 @@ export default function App() {
     }
     document.addEventListener('keydown', onKey)
     return () => document.removeEventListener('keydown', onKey)
-  }, [connectWs, startManualRecording, stopManualRecording, vadEnabled])
+  }, [startManualRecording, stopManualRecording, vadEnabled])
 
   // ─── Threshold bar visual update ─────────────────────────────────────────
   useEffect(() => {
@@ -621,56 +893,197 @@ export default function App() {
   const isRecording = status === 'recording'
   const isWaiting = status === 'waiting'
   const isPlaying = status === 'playing'
+  const chatTitle = dialogs.find((d) => d.id === selectedChatId)?.title || 'Bot'
+
+  // Auth gate
+  if (!authChecked) {
+    return (
+      <div className="app">
+        <div className="auth-screen">
+          <div className="spinner" />
+        </div>
+      </div>
+    )
+  }
+
+  if (authRequired && !authenticated) {
+    return (
+      <div className="app">
+        <div className="auth-screen">
+          <div className="auth-box">
+            <h2>OpenClaw Voice</h2>
+            <p>Enter the password to continue</p>
+            <form onSubmit={(e) => { e.preventDefault(); handleAuth() }}>
+              <input
+                type="password"
+                className="auth-input"
+                placeholder="Password"
+                value={authPassword}
+                onChange={(e) => setAuthPassword(e.target.value)}
+                autoFocus
+              />
+              <button type="submit" className="auth-submit">Enter</button>
+            </form>
+            {authError && <div className="auth-error">{authError}</div>}
+          </div>
+        </div>
+      </div>
+    )
+  }
 
   return (
     <div className="app">
       <header>
-        <h1>📱 OpenClaw Telegram Voice</h1>
-        <div className="subtitle">Voice → Telegram MTProto → Voice response</div>
+        <div className="header-avatar">
+          {selectedChatId ? chatTitle.charAt(0).toUpperCase() : '📱'}
+          <span className={`online-dot ${wsConnected && telegramConnected ? 'online' : ''}`} />
+        </div>
+        <div className="header-info">
+          <h1>{selectedChatId ? chatTitle : 'OpenClaw Voice'}</h1>
+          <div className="subtitle">
+            {!wsConnected
+              ? 'connecting...'
+              : !telegramConnected
+                ? 'connecting to Telegram...'
+                : selectedChatId
+                  ? 'voice chat'
+                  : 'select a chat to start'}
+          </div>
+        </div>
+        {selectedChatId && (
+          <button
+            className="header-btn"
+            onClick={() => { setSelectedChatId(null); fetchDialogs(false) }}
+            title="Switch chat"
+          >
+            ↩
+          </button>
+        )}
+        {audioQueueLen > 0 && (
+          <span className="queue-badge">{audioQueueLen}</span>
+        )}
       </header>
 
-      <div className="status-bar">
-        <div className={`status-dot ${wsConnected && telegramConnected ? 'connected' : wsConnected ? 'warning' : ''}`} />
-        <span>
-          {wsConnected
-            ? telegramConnected
-              ? '✅ Connected (WS + Telegram)'
-              : '⚠️ WS connected, Telegram disconnected'
-            : '❌ Disconnected'}
-        </span>
-        {audioQueueLen > 0 && (
-          <span className="queue-badge">{audioQueueLen} queued</span>
-        )}
-      </div>
+      {/* Chat picker — shown when Telegram is connected but no chat selected */}
+      {telegramConnected && !selectedChatId && (
+        <div className="chat-picker">
+          <div className="chat-picker-header">
+            <h2>Select a Chat</h2>
+            <p>Choose which Telegram chat to use for voice messages</p>
+            <input
+              type="text"
+              className="chat-search"
+              placeholder="Search chats..."
+              value={dialogSearch}
+              onChange={(e) => setDialogSearch(e.target.value)}
+            />
+          </div>
 
+          {dialogsLoading && (
+            <div className="chat-picker-loading">
+              <div className="spinner" />
+              <span>Loading chats...</span>
+            </div>
+          )}
+
+          {!dialogsLoading && (
+            <div className="chat-list">
+              {dialogs
+                .filter((d) => !d.archived)
+                .filter((d) => {
+                  if (!dialogSearch) return true
+                  const q = dialogSearch.toLowerCase()
+                  return d.name.toLowerCase().includes(q) || d.title.toLowerCase().includes(q)
+                })
+                .map((d) => (
+                  <button
+                    key={d.id}
+                    className={`chat-item ${d.pinned ? 'pinned' : ''}`}
+                    onClick={() => selectChat(d.id)}
+                  >
+                    <div className="chat-item-icon">
+                      {d.isUser ? '👤' : d.isChannel ? '📢' : '👥'}
+                    </div>
+                    <div className="chat-item-info">
+                      <div className="chat-item-name">
+                        {d.title || d.name}
+                        {d.pinned && <span className="pin-badge">pinned</span>}
+                      </div>
+                      <div className="chat-item-preview">
+                        {d.lastMessage || 'No messages'}
+                      </div>
+                    </div>
+                    {d.unreadCount > 0 && (
+                      <div className="chat-item-unread">{d.unreadCount}</div>
+                    )}
+                  </button>
+                ))}
+            </div>
+          )}
+        </div>
+      )}
+
+      {selectedChatId && (<>
       <div className="conversation" ref={conversationRef}>
         {messages.length === 0 && (
-          <div className="empty-state">
-            {micActivated
-              ? 'Tap the mic button or enable VAD to start talking'
-              : 'Tap 👂 to activate the microphone, then start talking'}
-          </div>
+          historyLoading ? (
+            <div className="empty-state">
+              <div className="spinner" />
+              <span>Loading chat history...</span>
+            </div>
+          ) : (
+            <div className="empty-state">
+              {micActivated
+                ? 'Tap the mic button or enable VAD to start talking'
+                : 'Tap 👂 to activate the microphone, then start talking'}
+            </div>
+          )
         )}
 
-        {messages.map((m, i) => (
-          <div key={i} className={`message ${m.role}`}>
-            <div className={`bubble ${m.role === 'assistant' && m.audioUrl ? 'voice' : ''}`}>
-              {m.text}
-            </div>
-            {m.audioUrl && (
-              <div className="audio-slot">
-                <audio controls src={m.audioUrl} preload="auto" />
+        {messages.map((m, i) => {
+          const showSender = m.role === 'assistant' && (i === 0 || messages[i - 1].role !== 'assistant')
+          const timeStr = new Date(m.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+          return (
+            <div key={i} className={`message ${m.role}`}>
+              <div className="bubble">
+                {showSender && <div className="sender-name">{chatTitle}</div>}
+                {m.quotedText && <div className="quote-inline">{m.quotedText.trim()}</div>}
+                {m.text && (
+                  <div className="msg-text">
+                    <ReactMarkdown remarkPlugins={[remarkGfm]}>{m.text}</ReactMarkdown>
+                  </div>
+                )}
+                {m.audioUrl && (
+                  <div className="audio-slot">
+                    <audio controls src={m.audioUrl} preload="auto" />
+                  </div>
+                )}
+                <span className="time">{timeStr}</span>
               </div>
-            )}
-            <div className="meta">{new Date(m.timestamp).toLocaleTimeString()}</div>
-          </div>
-        ))}
+            </div>
+          )
+        })}
 
-        {isWaiting && (
+        {(isWaiting || typingAction) && (
           <div className="message assistant">
-            <div className="thinking">
-              <div className="spinner" />
-              <span>Waiting for voice response...</span>
+            <div className="bubble typing-bubble">
+              {typingAction ? (
+                <div className="typing-indicator">
+                  <div className="typing-dots"><span /><span /><span /></div>
+                  <span>
+                    {typingAction === 'SendMessageRecordAudioAction'
+                      ? `${chatTitle} is recording audio`
+                      : typingAction === 'SendMessageUploadAudioAction'
+                        ? `${chatTitle} is sending audio`
+                        : `${chatTitle} is typing`}
+                  </span>
+                </div>
+              ) : (
+                <div className="thinking">
+                  <div className="spinner" />
+                  <span>Thinking...</span>
+                </div>
+              )}
             </div>
           </div>
         )}
@@ -678,98 +1091,86 @@ export default function App() {
 
       <div className="controls">
         <div className="controls-row">
-          {!micActivated && (
-            <button
-              className="btn"
-              id="activateBtn"
-              title="Activate microphone"
-              onClick={() => { unlockAudio(); unlockAudioCtx(); startMeter() }}
-            >
-              👂
-            </button>
-          )}
+          {/* Left group */}
+          <div className="controls-left">
+            <div className="speed-controls">
+              <span>Speed</span>
+              {[1, 1.25, 1.5, 2].map((s) => (
+                <button
+                  key={s}
+                  className={`speed-btn ${playbackSpeed === s ? 'active' : ''}`}
+                  onClick={() => setPlaybackSpeed(s)}
+                >
+                  {s}x
+                </button>
+              ))}
+            </div>
+            <div className="speed-controls">
+              <span>Silence</span>
+              {[1.5, 2, 3, 5].map((s) => (
+                <button
+                  key={s}
+                  className={`speed-btn ${vadSilenceMs === s * 1000 ? 'active' : ''}`}
+                  onClick={() => setVadSilenceMs(s * 1000)}
+                >
+                  {s}s
+                </button>
+              ))}
+            </div>
+          </div>
 
-          {/* PTT button */}
+          {/* Hold-to-talk (dead center) */}
           <button
             className={`ptt-btn ${isRecording ? 'recording' : ''}`}
             disabled={recordingCooldown || vadEnabled}
-            onClick={() => {
-              if (isRecording) stopManualRecording()
-              else startManualRecording()
-            }}
-            title="Push-to-talk (or press Space)"
+            onMouseDown={(e) => { e.preventDefault(); startManualRecording() }}
+            onMouseUp={() => { if (isRecording) stopManualRecording() }}
+            onMouseLeave={() => { if (isRecording) stopManualRecording() }}
+            onTouchStart={(e) => { e.preventDefault(); startManualRecording() }}
+            onTouchEnd={() => { if (isRecording) stopManualRecording() }}
+            title="Hold to talk"
           >
-            {isRecording ? '⏹' : '🎤'}
+            🎙️
           </button>
 
-          {/* VAD toggle */}
-          <button
-            className={`vad-btn ${vadEnabled ? 'active' : ''}`}
-            onClick={toggleVad}
-            title="Toggle Voice Activity Detection"
-          >
-            {vadEnabled ? '🔴' : '🎙️'}
-          </button>
-
-          {/* Calibrate */}
-          <button
-            className="calibrate-btn"
-            disabled={vadCalibrating}
-            onClick={startCalibration}
-            title="Calibrate microphone threshold"
-          >
-            {vadCalibrating ? '📊' : '🎚️'}
-          </button>
-
-          {/* Status */}
-          <div className={`status-indicator ${status}`}>
-            {STATUS_ICONS[status]} {STATUS_LABELS[status]}
-          </div>
-
-          {/* Clear */}
-          <button
-            className="clear-btn"
-            title="Clear conversation"
-            onClick={() => {
-              if (confirm('Clear conversation?')) setMessages([])
-            }}
-          >
-            🗑️
-          </button>
-        </div>
-
-        {/* Calibration state */}
-        {vadCalibrating && (
-          <div className="vad-status">
-            {calibrationStep === 'silence' && (
-              <div className="vad-calibrating">🔇 Stay silent for 3 seconds...</div>
-            )}
-            {calibrationStep === 'speak' && (
-              <div className="vad-calibrating">
-                🗣️ Read this aloud (stop when done):<br />
-                <span className="calibration-phrase">"{calibrationPhrase}"</span>
-              </div>
-            )}
-            {calibrationStep === 'done' && (
-              <div className="vad-calibrating">✅ Calibration complete!</div>
-            )}
-          </div>
-        )}
-
-        {/* VAD status */}
-        {!vadCalibrating && vadEnabled && (
-          <div className="vad-status">
-            <div className="vad-listening">
-              {ttsPlaying
-                ? `⏸️ Paused (${audioQueueLen + 1} in queue)`
-                : isRecording
-                  ? '🔴 Recording...'
-                  : isPlaying
-                    ? '🔊 Playing...'
-                    : '👂 Listening...'}
+          {/* Right group */}
+          <div className="controls-right">
+            <div className={`status-indicator ${status}`}>
+              {STATUS_ICONS[status]} {STATUS_LABELS[status]}
             </div>
+
+            {!micActivated && (
+              <button
+                className="btn"
+                id="activateBtn"
+                title="Activate microphone"
+                onClick={() => { unlockAudio(); unlockAudioCtx(); startMeter() }}
+              >
+                👂
+              </button>
+            )}
+
+            <button
+              className={`vad-btn ${vadEnabled ? 'active' : ''}`}
+              onClick={toggleVad}
+              title="Toggle Voice Activity Detection"
+            >
+              {vadEnabled ? '🔴' : '🎙️'}
+            </button>
+
+            <button
+              className={`vad-btn ${isRecording ? 'active recording-toggle' : ''}`}
+              disabled={recordingCooldown || vadEnabled}
+              onClick={() => {
+                if (isRecording) stopManualRecording()
+                else startManualRecording()
+              }}
+              title="Toggle recording (or press Space)"
+            >
+              {isRecording ? '⏹' : '🎤'}
+            </button>
           </div>
-        )}
+        </div>
 
         {/* Level meter + threshold handle */}
         <div className="threshold-bar-wrap" title="Drag to set VAD threshold">
@@ -777,6 +1178,7 @@ export default function App() {
           <div className="threshold-handle" id="threshHandle" />
         </div>
       </div>
+      </>)}
     </div>
   )
 }
