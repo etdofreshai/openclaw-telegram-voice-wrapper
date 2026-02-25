@@ -6,6 +6,7 @@ import {
   soundRecordStart, soundRecordStop, soundSendSuccess, soundError,
   soundVadSpeechStart,
   soundVadListening, soundTooShort, soundCalibrationBeep, unlockAudioCtx,
+  startThinkingSound, stopThinkingSound,
 } from './sounds'
 
 const BASE = import.meta.env.BASE_URL
@@ -198,6 +199,16 @@ export default function App() {
   // Keep refs in sync
   useEffect(() => { ttsPlayingRef.current = ttsPlaying }, [ttsPlaying])
   useEffect(() => { vadEnabledRef.current = vadEnabled }, [vadEnabled])
+
+  // Play doot-doot-doot loop while Telegram typing indicator is active
+  useEffect(() => {
+    if (typingAction) {
+      startThinkingSound()
+    } else {
+      stopThinkingSound()
+    }
+    return () => stopThinkingSound()
+  }, [typingAction])
   useEffect(() => {
     vadSilenceMsRef.current = vadSilenceMs
     localStorage.setItem('vad-silence-ms', String(vadSilenceMs))
@@ -1116,7 +1127,7 @@ export default function App() {
               ) : (
                 <div className="thinking">
                   <div className="spinner" />
-                  <span>Thinking...</span>
+                  <span>Waiting for audio...</span>
                 </div>
               )}
             </div>
