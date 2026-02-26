@@ -271,14 +271,19 @@ app.post('/api/send-voice', upload.single('audio'), async (req, res) => {
 
     const targetChatId = parseChatId(currentTargetChatId);
     const rawBuffer = Buffer.from(req.file.buffer);
+    console.log(`[Send Voice] Received ${rawBuffer.length}b, mimetype=${req.file.mimetype}`);
 
     // Convert to OGG Opus so Telegram classifies it as a voice note, not video/webm
     let buffer = rawBuffer;
+    let conversionNote = 'raw (no conversion)';
     try {
       buffer = await convertToOgg(rawBuffer);
-      console.log(`[Send Voice] Converted ${rawBuffer.length}b → ${buffer.length}b OGG`);
+      conversionNote = `converted ${rawBuffer.length}b → ${buffer.length}b OGG`;
+      console.log(`[Send Voice] ${conversionNote}`);
     } catch (convErr) {
-      console.warn('[Send Voice] ffmpeg conversion failed, sending raw:', convErr);
+      const convMsg = convErr instanceof Error ? convErr.message : String(convErr);
+      console.warn('[Send Voice] ffmpeg conversion failed, sending raw:', convMsg);
+      conversionNote = `conversion failed: ${convMsg}`;
     }
 
     await telegramClient.sendFile(
@@ -289,7 +294,7 @@ app.post('/api/send-voice', upload.single('audio'), async (req, res) => {
       }
     );
 
-    console.log(`[Telegram] Sent voice note: ${buffer.length} bytes`);
+    console.log(`[Telegram] Sent voice note: ${buffer.length} bytes (${conversionNote})`);
     res.json({ ok: true });
   } catch (err: unknown) {
     const msg = err instanceof Error ? err.message : String(err);
