@@ -148,6 +148,7 @@ export default function App() {
 
   // Typing indicator
   const [typingAction, setTypingAction] = useState<string | null>(null)
+  const [typingSender, setTypingSender] = useState<string>('OpenClaw')
   const typingTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   // Suppress late typing events that arrive after a message clears the indicator
   const typingSuppressedUntilRef = useRef<number>(0)
@@ -370,6 +371,7 @@ export default function App() {
           // Ignore late typing events that arrive after a message already cleared the indicator
           if (Date.now() >= typingSuppressedUntilRef.current) {
             setTypingAction(msg.action || 'SendMessageTypingAction')
+            if (msg.senderName) setTypingSender(msg.senderName)
             if (typingTimeoutRef.current) clearTimeout(typingTimeoutRef.current)
             typingTimeoutRef.current = setTimeout(() => setTypingAction(null), 6000)
           }
@@ -1243,26 +1245,19 @@ export default function App() {
           )
         })}
 
-        {(isWaiting || typingAction) && (
+        {typingAction && (
           <div className="message assistant">
             <div className="bubble typing-bubble">
-              {typingAction ? (
-                <div className="typing-indicator">
-                  <div className="typing-dots"><span /><span /><span /></div>
-                  <span>
-                    {typingAction === 'SendMessageRecordAudioAction'
-                      ? `${chatTitle} is recording audio`
-                      : typingAction === 'SendMessageUploadAudioAction'
-                        ? `${chatTitle} is sending audio`
-                        : `${chatTitle} is typing`}
-                  </span>
-                </div>
-              ) : (
-                <div className="thinking">
-                  <div className="spinner" />
-                  <span>Waiting for audio...</span>
-                </div>
-              )}
+              <div className="typing-indicator">
+                <div className="typing-dots"><span /><span /><span /></div>
+                <span>
+                  {typingAction === 'SendMessageRecordAudioAction'
+                    ? `${typingSender} is recording audio`
+                    : typingAction === 'SendMessageUploadAudioAction'
+                      ? `${typingSender} is sending audio`
+                      : `${typingSender} is typing`}
+                </span>
+              </div>
             </div>
           </div>
         )}

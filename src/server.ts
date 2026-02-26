@@ -208,7 +208,17 @@ async function connectTelegram(): Promise<void> {
         if (!chatIdStr.includes(targetStr)) return;
 
         const action = u.action?.className || 'SendMessageTypingAction';
-        broadcastToClients({ type: 'typing', action, timestamp: Date.now() });
+        // Try to get the sender's name
+        let senderName = 'OpenClaw';
+        try {
+          const userId = u.userId || u.fromId?.userId;
+          if (userId && telegramClient) {
+            const entity = await telegramClient.getEntity(userId);
+            const e = entity as any;
+            senderName = e.firstName || e.username || e.title || 'OpenClaw';
+          }
+        } catch { /* fall back to default */ }
+        broadcastToClients({ type: 'typing', action, senderName, timestamp: Date.now() });
         return;
       }
 
