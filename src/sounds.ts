@@ -107,8 +107,8 @@ export function soundVadListening() {
   playTone(550, 0.06, 'sine', 0.08, 0.06);
 }
 
-/** Recording too short — quick descending blip */
+/** Recording too short — punchy error buzz */
 export function soundTooShort() {
-  playTone(400, 0.08, 'sine', 0.1);
-  playTone(250, 0.08, 'sine', 0.08, 0.08);
+  playTone(370, 0.12, 'square', 0.25);
+  playTone(280, 0.18, 'square', 0.25, 0.1);
 }
