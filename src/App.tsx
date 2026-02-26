@@ -166,6 +166,7 @@ export default function App() {
   const cancelRecordingRef = useRef(false)
   const isStoppingRef = useRef(false)
   const touchActiveRef = useRef(false)
+  const mouseDownRef = useRef(false)
   const audioQueueRef = useRef<string[]>([])
   const ttsAudioRef = useRef<HTMLAudioElement | null>(null)
   const ttsPlayingRef = useRef(false)
@@ -972,6 +973,36 @@ export default function App() {
     }
   }, [connectWs])
 
+  // ─── Document-level mouse tracking for PTT drag-to-cancel ──────────────────
+  useEffect(() => {
+    const onMouseMove = (e: MouseEvent) => {
+      if (!mouseDownRef.current || touchActiveRef.current) return
+      if (statusRef.current !== 'recording') return
+      const dx = pttStartXRef.current - e.clientX
+      setCancelHover(dx > 80)
+    }
+    const onMouseUp = () => {
+      if (!mouseDownRef.current || touchActiveRef.current) return
+      mouseDownRef.current = false
+      if (statusRef.current === 'recording') {
+        // Read cancelHover from the ref-like state — use a small trick:
+        // We need the current value, so we use the setter's callback form
+        setCancelHover((prev) => {
+          if (prev) { cancelManualRecording() } else { stopManualRecording() }
+          return false
+        })
+      } else {
+        setCancelHover(false)
+      }
+    }
+    document.addEventListener('mousemove', onMouseMove)
+    document.addEventListener('mouseup', onMouseUp)
+    return () => {
+      document.removeEventListener('mousemove', onMouseMove)
+      document.removeEventListener('mouseup', onMouseUp)
+    }
+  }, [cancelManualRecording, stopManualRecording])
+
   // ─── Init: Keyboard handler ────────────────────────────────────────────────
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
@@ -1273,21 +1304,13 @@ export default function App() {
               onMouseDown={(e) => {
                 if (touchActiveRef.current) return; e.preventDefault()
                 pttStartXRef.current = e.clientX
+                mouseDownRef.current = true
                 startManualRecording()
               }}
-              onMouseMove={(e) => {
-                if (touchActiveRef.current || !isRecording) return
-                const dx = pttStartXRef.current - e.clientX
-                setCancelHover(dx > 80)
-              }}
               onMouseUp={() => {
-                if (touchActiveRef.current) return
+                if (touchActiveRef.current || !mouseDownRef.current) return
+                mouseDownRef.current = false
                 if (isRecording) { if (cancelHover) { cancelManualRecording(); setCancelHover(false) } else stopManualRecording() }
-                setCancelHover(false)
-              }}
-              onMouseLeave={() => {
-                if (touchActiveRef.current) return
-                if (isRecording) { if (cancelHover) { cancelManualRecording() } else stopManualRecording() }
                 setCancelHover(false)
               }}
               onTouchStart={(e) => {
