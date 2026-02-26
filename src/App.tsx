@@ -21,6 +21,7 @@ interface Message {
   quotedText?: string
   messageId?: number
   isError?: boolean
+  senderName?: string
 }
 
 interface TelegramDialog {
@@ -149,12 +150,14 @@ export default function App() {
   // Typing indicator
   const [typingAction, setTypingAction] = useState<string | null>(null)
   const [typingSender, setTypingSender] = useState<string>('OpenClaw')
+  const typingSenderRef = useRef<string>('OpenClaw')
   const typingTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   // Suppress late typing events that arrive after a message clears the indicator
   const typingSuppressedUntilRef = useRef<number>(0)
 
   // Chat selection
   const [selectedChatId, setSelectedChatId] = useState<string | null>(null)
+  const selectedChatIdRef = useRef<string | null>(null)
   const [dialogs, setDialogs] = useState<TelegramDialog[]>([])
   const [dialogsLoading, setDialogsLoading] = useState(false)
   const [dialogSearch, setDialogSearch] = useState('')
@@ -207,6 +210,8 @@ export default function App() {
   // Keep refs in sync
   useEffect(() => { ttsPlayingRef.current = ttsPlaying }, [ttsPlaying])
   useEffect(() => { vadEnabledRef.current = vadEnabled }, [vadEnabled])
+  useEffect(() => { typingSenderRef.current = typingSender }, [typingSender])
+  useEffect(() => { selectedChatIdRef.current = selectedChatId }, [selectedChatId])
 
   // Play doot-doot-doot loop while Telegram typing indicator is active
   useEffect(() => {
@@ -365,13 +370,15 @@ export default function App() {
           const text = msg.text || ''
           const quotedText = msg.quotedText || ''
           if (text || quotedText) {
-            upsertMessage(msg.messageId, { role: 'assistant', text, quotedText: quotedText || undefined, messageId: msg.messageId, timestamp: msg.timestamp || Date.now() })
+            upsertMessage(msg.messageId, { role: 'assistant', text, quotedText: quotedText || undefined, messageId: msg.messageId, timestamp: msg.timestamp || Date.now(), senderName: typingSenderRef.current })
           }
         } else if (msg.type === 'typing') {
+          // Filter: only show typing for the currently selected chat
+          if (msg.chatId && selectedChatIdRef.current && msg.chatId !== selectedChatIdRef.current) return
           // Ignore late typing events that arrive after a message already cleared the indicator
           if (Date.now() >= typingSuppressedUntilRef.current) {
             setTypingAction(msg.action || 'SendMessageTypingAction')
-            if (msg.senderName) setTypingSender(msg.senderName)
+            if (msg.senderName) { setTypingSender(msg.senderName); typingSenderRef.current = msg.senderName }
             if (typingTimeoutRef.current) clearTimeout(typingTimeoutRef.current)
             typingTimeoutRef.current = setTimeout(() => setTypingAction(null), 6000)
           }
@@ -409,6 +416,7 @@ export default function App() {
         messageId,
         audioUrl: url,
         timestamp: Date.now(),
+        senderName: typingSenderRef.current,
       })
 
       // Queue for playback
@@ -1227,7 +1235,7 @@ export default function App() {
           return (
             <div key={i} className={`message ${m.role}${m.isError ? ' error' : ''}`}>
               <div className={`bubble${m.isError ? ' error-bubble' : ''}`}>
-                {showSender && <div className="sender-name">{chatTitle}</div>}
+                {showSender && <div className="sender-name">{m.senderName || 'OpenClaw'}</div>}
                 {m.quotedText && <div className="quote-inline">{m.quotedText.trim()}</div>}
                 {m.text && (
                   <div className="msg-text">

@@ -218,7 +218,7 @@ async function connectTelegram(): Promise<void> {
             senderName = e.firstName || e.username || e.title || 'OpenClaw';
           }
         } catch { /* fall back to default */ }
-        broadcastToClients({ type: 'typing', action, senderName, timestamp: Date.now() });
+        broadcastToClients({ type: 'typing', action, senderName, chatId: currentTargetChatId, timestamp: Date.now() });
         return;
       }
 
