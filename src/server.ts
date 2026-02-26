@@ -143,6 +143,13 @@ async function connectTelegram(): Promise<void> {
         if (!peerStr.includes(targetStr)) return;
       }
 
+      // Mark message as read so Telegram clears the unread badge
+      try {
+        await telegramClient!.markAsRead(parseChatId(currentTargetChatId) as any);
+      } catch (err) {
+        console.error('[Telegram] Failed to mark as read:', err);
+      }
+
       // Clear typing indicator when a message arrives
       broadcastToClients({ type: 'typing_stop' });
 
