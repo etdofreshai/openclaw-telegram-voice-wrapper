@@ -685,7 +685,16 @@ export default function App() {
       const mr = new MediaRecorder(stream, { mimeType: getSupportedMimeType() })
       mediaRecorderRef.current = mr
       mr.ondataavailable = (e) => { if (e.data.size > 0) audioChunksRef.current.push(e.data) }
-      mr.onstop = () => { stream.getTracks().forEach((t) => t.stop()); processRecording() }
+      mr.onstop = () => {
+        stream.getTracks().forEach((t) => t.stop())
+        if (cancelRecordingRef.current) {
+          cancelRecordingRef.current = false
+          audioChunksRef.current = []
+          isStoppingRef.current = false
+          return
+        }
+        processRecording()
+      }
       mr.start()
       recordingStartRef.current = Date.now()
       updateStatus('recording')
@@ -713,10 +722,12 @@ export default function App() {
       setTimeout(() => setTooShortToast(false), 2000)
       updateStatus('idle')
       const captured = mr
+      // Stop the recorder — onstop handler will check cancelRecordingRef and discard
       setTimeout(() => {
         if (captured.state !== 'inactive') captured.stop()
-        isStoppingRef.current = false
       }, 100)
+      // Reset stopping guard immediately so next recording isn't blocked
+      isStoppingRef.current = false
       return
     }
 
