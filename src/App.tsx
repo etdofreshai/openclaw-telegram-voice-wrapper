@@ -658,6 +658,24 @@ export default function App() {
   const vadStopRecording = useCallback(() => {
     const mr = mediaRecorderRef.current
     if (!mr || mr.state === 'inactive') return
+
+    const MIN_VAD_DURATION_MS = 2500
+    const duration = Date.now() - recordingStartRef.current
+
+    if (duration < MIN_VAD_DURATION_MS) {
+      // Too short — cancel recording, don't send
+      cancelRecordingRef.current = true
+      soundTooShort()
+      setTooShortToast(true)
+      setTimeout(() => setTooShortToast(false), 2000)
+      updateStatus('listening')
+      const captured = mr
+      setTimeout(() => {
+        if (captured.state !== 'inactive') captured.stop()
+      }, 100)
+      return
+    }
+
     updateStatus('waiting')
     soundRecordStop()
     const captured = mr
