@@ -61,6 +61,21 @@ Make the bottom control bar context-sensitive during VAD (auto-record) mode:
 
 ---
 
+## 4. Fix "OpenClaw is typing" Indicator Not Clearing
+**Priority:** Medium  
+**Status:** Pending
+
+The Telegram "is typing" indicator stays active even after the audio response has been received and played. This was supposedly fixed before but has regressed.
+
+**Details:**
+- Response arrives and audio plays
+- "OpenClaw is typing..." still shows in the chat
+- Should clear as soon as audio starts playing or response is complete
+
+**Root cause:** Likely the typing state isn't being cleared after the TTS response completes. May need to hook into the audio player's `onended` event or the response handler.
+
+---
+
 ## Completed
 - ✅ Fixed VAD timeout (30s → 120s → 300s / 5 minutes)
 - ✅ Increased minimum duration check for push-to-talk (2.5 seconds)
