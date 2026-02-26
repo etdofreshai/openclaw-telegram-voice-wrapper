@@ -1052,7 +1052,7 @@ button:disabled {
     align-items: flex-start;
     align-self: flex-start;
     gap: 4px;
-    padding-top: 8px;
+    padding-top: 0;
   }
 
   .controls-right {
