@@ -1268,7 +1268,61 @@ export default function App() {
         )}
       </div>
 
-      <div className={`controls ${pttActive ? 'ptt-active' : ''} ${pttRecording ? 'ptt-recording' : ''} ${pttWaiting ? 'ptt-waiting' : ''}`}>
+      <div className={`controls ${pttActive ? 'ptt-active' : ''} ${pttRecording ? 'ptt-recording' : ''} ${pttWaiting ? 'ptt-waiting' : ''} ${vadEnabled ? 'vad-mode' : ''} ${vadEnabled ? `vad-phase-${status}` : ''}`}>
+        {/* ─── VAD Mode: context-aware bar ─── */}
+        {vadEnabled ? (
+          <div className="vad-bar">
+            {/* Status line — always visible */}
+            <div className={`vad-bar-status ${status}`}>
+              {status === 'listening' && (
+                <span className="vad-bar-status-text"><span className="vad-pulse-dot" /> Ready, listening…</span>
+              )}
+              {status === 'recording' && (
+                <span className="vad-bar-status-text"><span className="vad-record-dot" /> Recording…</span>
+              )}
+              {status === 'waiting' && (
+                <span className="vad-bar-status-text"><div className="spinner" /> {waitingDetail}</span>
+              )}
+              {status === 'playing' && (
+                <span className="vad-bar-status-text">🔊 Playing response…</span>
+              )}
+              {status === 'idle' && (
+                <span className="vad-bar-status-text">VAD Active</span>
+              )}
+            </div>
+
+            {/* Cancel button — visible during listening & recording only */}
+            <div className={`vad-bar-cancel ${status === 'listening' || status === 'recording' ? '' : 'vad-hidden'}`}>
+              <button className="vad-cancel-btn" onClick={toggleVad} title="Stop auto-record">
+                ✕ Stop
+              </button>
+            </div>
+
+            {/* Secondary controls — dimmed during recording, hidden during waiting/playing */}
+            <div className={`vad-bar-secondary ${status === 'recording' ? 'vad-dimmed' : ''} ${status === 'waiting' || status === 'playing' ? 'vad-hidden' : ''}`}>
+              <div className="speed-controls">
+                <span>Speed</span>
+                {[1, 1.25, 1.5, 2].map((s) => (
+                  <button key={s} className={`speed-btn ${playbackSpeed === s ? 'active' : ''}`} onClick={() => setPlaybackSpeed(s)}>{s}x</button>
+                ))}
+              </div>
+              <div className="speed-controls">
+                <span>Silence</span>
+                {[1.5, 2, 3, 5].map((s) => (
+                  <button key={s} className={`speed-btn ${vadSilenceMs === s * 1000 ? 'active' : ''}`} onClick={() => setVadSilenceMs(s * 1000)}>{s}s</button>
+                ))}
+              </div>
+            </div>
+
+            {/* Threshold bar — hidden during waiting/playing */}
+            <div className={`threshold-bar-wrap ${status === 'waiting' || status === 'playing' ? 'vad-hidden' : ''}`} title="Drag to set VAD threshold">
+              <div className="threshold-fill" id="threshFill" />
+              <div className="threshold-handle" id="threshHandle" />
+            </div>
+          </div>
+        ) : (
+        /* ─── Normal PTT Mode ─── */
+        <>
         {/* PTT waiting status message */}
         {pttWaiting && (
           <div className="ptt-status-message">
@@ -1277,51 +1331,30 @@ export default function App() {
           </div>
         )}
         <div className="controls-row">
-          {/* Left group: speed + silence only (grid col 1) */}
           <div className="controls-left controls-fadeable">
             <div className="speed-controls">
               <span>Speed</span>
               {[1, 1.25, 1.5, 2].map((s) => (
-                <button
-                  key={s}
-                  className={`speed-btn ${playbackSpeed === s ? 'active' : ''}`}
-                  onClick={() => setPlaybackSpeed(s)}
-                >
-                  {s}x
-                </button>
+                <button key={s} className={`speed-btn ${playbackSpeed === s ? 'active' : ''}`} onClick={() => setPlaybackSpeed(s)}>{s}x</button>
               ))}
             </div>
             <div className="speed-controls">
               <span>Silence</span>
               {[1.5, 2, 3, 5].map((s) => (
-                <button
-                  key={s}
-                  className={`speed-btn ${vadSilenceMs === s * 1000 ? 'active' : ''}`}
-                  onClick={() => setVadSilenceMs(s * 1000)}
-                >
-                  {s}s
-                </button>
+                <button key={s} className={`speed-btn ${vadSilenceMs === s * 1000 ? 'active' : ''}`} onClick={() => setVadSilenceMs(s * 1000)}>{s}s</button>
               ))}
             </div>
           </div>
 
-          {/* Narrow-only left: status shown left of PTT in portrait (hidden on wide) */}
           <div className="narrow-left controls-fadeable">
             <div className={`status-indicator ${status}`}>
               {STATUS_ICONS[status]} {STATUS_LABELS[status]}
             </div>
             {!micActivated && (
-              <button
-                className="btn"
-                title="Activate microphone"
-                onClick={() => { unlockAudio(); unlockAudioCtx(); startMeter() }}
-              >
-                👂
-              </button>
+              <button className="btn" title="Activate microphone" onClick={() => { unlockAudio(); unlockAudioCtx(); startMeter() }}>👂</button>
             )}
           </div>
 
-          {/* Hold-to-talk with swipe-to-cancel */}
           <div className={`ptt-zone ${isRecording ? 'recording' : ''}`}>
             {isRecording && (
               <div className={`cancel-zone ${cancelHover ? 'active' : ''}`}>
@@ -1368,36 +1401,20 @@ export default function App() {
             </button>
           </div>
 
-          {/* Right group: status + buttons (grid col 3) */}
           <div className="controls-right controls-fadeable">
             <div className={`status-indicator ${status}`}>
               {STATUS_ICONS[status]} {STATUS_LABELS[status]}
             </div>
             {!micActivated && (
-              <button
-                className="btn"
-                id="activateBtn"
-                title="Activate microphone"
-                onClick={() => { unlockAudio(); unlockAudioCtx(); startMeter() }}
-              >
-                👂
-              </button>
+              <button className="btn" id="activateBtn" title="Activate microphone" onClick={() => { unlockAudio(); unlockAudioCtx(); startMeter() }}>👂</button>
             )}
-            <button
-              className={`vad-btn ${vadEnabled ? 'active' : ''}`}
-              onClick={toggleVad}
-              title="Toggle Voice Activity Detection"
-            >
+            <button className={`vad-btn ${vadEnabled ? 'active' : ''}`} onClick={toggleVad} title="Toggle Voice Activity Detection">
               {vadEnabled ? '🔴' : '🎙️'}
             </button>
-
             <button
               className={`vad-btn ${isRecording ? 'active recording-toggle' : ''}`}
               disabled={recordingCooldown || vadEnabled}
-              onClick={() => {
-                if (isRecording) stopManualRecording()
-                else startManualRecording()
-              }}
+              onClick={() => { if (isRecording) stopManualRecording(); else startManualRecording() }}
               title="Toggle recording (or press Space)"
             >
               {isRecording ? '⏹' : '🎤'}
@@ -1405,11 +1422,12 @@ export default function App() {
           </div>
         </div>
 
-        {/* Level meter + threshold handle */}
         <div className="threshold-bar-wrap controls-fadeable" title="Drag to set VAD threshold">
           <div className="threshold-fill" id="threshFill" />
           <div className="threshold-handle" id="threshHandle" />
         </div>
+        </>
+        )}
       </div>
       </>)}
     </div>

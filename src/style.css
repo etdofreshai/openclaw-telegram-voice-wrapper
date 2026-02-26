@@ -810,6 +810,122 @@ button:disabled {
   margin-left: 4px;
 }
 
+/* ─── VAD Context-Aware Bar ───────────────────────────────────────────── */
+.vad-bar {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  align-items: center;
+}
+
+.vad-bar-status {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+  padding: 6px 0;
+}
+
+.vad-bar-status-text {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 0.9rem;
+  font-weight: 500;
+}
+
+.vad-bar-status.listening .vad-bar-status-text { color: var(--green); }
+.vad-bar-status.recording .vad-bar-status-text { color: var(--red); }
+.vad-bar-status.waiting .vad-bar-status-text { color: var(--blue); }
+.vad-bar-status.playing .vad-bar-status-text { color: var(--mauve); }
+.vad-bar-status.idle .vad-bar-status-text { color: var(--subtext0); }
+
+.vad-pulse-dot {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  background: var(--green);
+  animation: vadPulse 2s ease-in-out infinite;
+  flex-shrink: 0;
+}
+
+.vad-record-dot {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  background: var(--red);
+  animation: vadPulse 1s ease-in-out infinite;
+  flex-shrink: 0;
+}
+
+@keyframes vadPulse {
+  0%, 100% { opacity: 1; transform: scale(1); }
+  50% { opacity: 0.4; transform: scale(0.8); }
+}
+
+.vad-bar-cancel {
+  transition: opacity 0.18s ease, max-height 0.18s ease;
+  opacity: 1;
+  max-height: 60px;
+  overflow: hidden;
+}
+
+.vad-cancel-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  padding: 10px 24px;
+  border-radius: 24px;
+  background: rgba(239, 83, 80, 0.12);
+  border: 2px solid var(--red);
+  color: var(--red);
+  font-size: 0.9rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background 0.15s, transform 0.1s;
+}
+
+.vad-cancel-btn:hover {
+  background: rgba(239, 83, 80, 0.25);
+  transform: scale(1.03);
+}
+
+.vad-cancel-btn:active {
+  transform: scale(0.97);
+}
+
+.vad-bar-secondary {
+  display: flex;
+  gap: 12px;
+  align-items: center;
+  justify-content: center;
+  transition: opacity 0.18s ease, max-height 0.18s ease;
+  opacity: 1;
+  max-height: 60px;
+  overflow: hidden;
+}
+
+/* Shared VAD fade/hide utility classes */
+.vad-dimmed {
+  opacity: 0.3;
+  pointer-events: none;
+}
+
+.vad-hidden {
+  opacity: 0;
+  max-height: 0;
+  pointer-events: none;
+  margin: 0;
+  padding: 0;
+}
+
+/* When VAD waiting/playing, make controls minimal */
+.controls.vad-phase-waiting,
+.controls.vad-phase-playing {
+  padding: 12px 16px;
+}
+
 /* ─── Scrollbar ───────────────────────────────────────────────────────── */
 .conversation::-webkit-scrollbar { width: 4px; }
 .conversation::-webkit-scrollbar-track { background: transparent; }
