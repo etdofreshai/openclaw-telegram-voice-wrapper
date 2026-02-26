@@ -20,7 +20,7 @@ dotenv.config();
 if (ffmpegStatic) ffmpeg.setFfmpegPath(ffmpegStatic);
 
 /** Convert any audio format (WebM, MP4, etc.) to OGG Opus for Telegram voice notes */
-async function convertToOgg(inputBuffer: Buffer): Promise<Buffer> {
+async function convertToOgg(inputBuffer: Buffer): Promise<Buffer<ArrayBuffer>> {
   const id = randomBytes(8).toString('hex');
   const inputPath = join(tmpdir(), `vc_in_${id}`);
   const outputPath = join(tmpdir(), `vc_out_${id}.ogg`);
@@ -37,7 +37,7 @@ async function convertToOgg(inputBuffer: Buffer): Promise<Buffer> {
     fs.promises.unlink(inputPath).catch(() => {}),
     fs.promises.unlink(outputPath).catch(() => {}),
   ]);
-  return out;
+  return Buffer.from(out) as Buffer<ArrayBuffer>;
 }
 
 const PORT = parseInt(process.env.PORT || process.env.BACKEND_PORT || '3000');
@@ -270,11 +270,11 @@ app.post('/api/send-voice', upload.single('audio'), async (req, res) => {
     }
 
     const targetChatId = parseChatId(currentTargetChatId);
-    const rawBuffer = Buffer.from(req.file.buffer);
+    const rawBuffer = Buffer.from(req.file.buffer) as Buffer<ArrayBuffer>;
     console.log(`[Send Voice] Received ${rawBuffer.length}b, mimetype=${req.file.mimetype}`);
 
     // Convert to OGG Opus so Telegram classifies it as a voice note, not video/webm
-    let buffer = rawBuffer;
+    let buffer: Buffer<ArrayBuffer> = rawBuffer;
     let conversionNote = 'raw (no conversion)';
     try {
       buffer = await convertToOgg(rawBuffer);
