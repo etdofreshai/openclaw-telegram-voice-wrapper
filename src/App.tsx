@@ -149,6 +149,8 @@ export default function App() {
   // Typing indicator
   const [typingAction, setTypingAction] = useState<string | null>(null)
   const typingTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+  // Suppress late typing events that arrive after a message clears the indicator
+  const typingSuppressedUntilRef = useRef<number>(0)
 
   // Chat selection
   const [selectedChatId, setSelectedChatId] = useState<string | null>(null)
@@ -340,9 +342,11 @@ export default function App() {
           setSelectedChatId(msg.chatId || null)
         } else if (msg.type === 'voice') {
           setTypingAction(null)
+          typingSuppressedUntilRef.current = Date.now() + 3000
           handleIncomingVoice(msg.audioData, msg.messageId, msg.text, msg.quotedText)
         } else if (msg.type === 'text') {
           setTypingAction(null)
+          typingSuppressedUntilRef.current = Date.now() + 3000
           const text = msg.text || ''
           const quotedText = msg.quotedText || ''
           if ((text || quotedText) && text !== 'NO_REPLY' && text !== 'HEARTBEAT_OK') {
@@ -356,15 +360,19 @@ export default function App() {
           }
         } else if (msg.type === 'text_update') {
           setTypingAction(null)
+          typingSuppressedUntilRef.current = Date.now() + 3000
           const text = msg.text || ''
           const quotedText = msg.quotedText || ''
           if (text || quotedText) {
             upsertMessage(msg.messageId, { role: 'assistant', text, quotedText: quotedText || undefined, messageId: msg.messageId, timestamp: msg.timestamp || Date.now() })
           }
         } else if (msg.type === 'typing') {
-          setTypingAction(msg.action || 'SendMessageTypingAction')
-          if (typingTimeoutRef.current) clearTimeout(typingTimeoutRef.current)
-          typingTimeoutRef.current = setTimeout(() => setTypingAction(null), 6000)
+          // Ignore late typing events that arrive after a message already cleared the indicator
+          if (Date.now() >= typingSuppressedUntilRef.current) {
+            setTypingAction(msg.action || 'SendMessageTypingAction')
+            if (typingTimeoutRef.current) clearTimeout(typingTimeoutRef.current)
+            typingTimeoutRef.current = setTimeout(() => setTypingAction(null), 6000)
+          }
         } else if (msg.type === 'typing_stop') {
           setTypingAction(null)
           if (typingTimeoutRef.current) clearTimeout(typingTimeoutRef.current)
@@ -384,6 +392,7 @@ export default function App() {
       // Voice arrived — clear typing indicator immediately (don't wait for typing_stop)
       if (typingTimeoutRef.current) clearTimeout(typingTimeoutRef.current)
       setTypingAction(null)
+      typingSuppressedUntilRef.current = Date.now() + 3000
 
       // Decode base64 OGG → Blob URL
       const bytes = Uint8Array.from(atob(audioData), (c) => c.charCodeAt(0))
@@ -1031,6 +1040,22 @@ export default function App() {
     }
   }, [vadLevel, vadThreshold])
 
+  // ─── PTT context state ──────────────────────────────────────────────────
+  // Determine if we're in a PTT flow (recording or waiting after PTT release)
+  // VAD mode doesn't use PTT, so pttActive only applies to manual recording
+  const pttActive = !vadEnabled && (status === 'recording' || status === 'waiting')
+  const pttRecording = !vadEnabled && status === 'recording'
+  const pttWaiting = !vadEnabled && status === 'waiting'
+
+  // Waiting status detail message
+  const waitingDetail = typingAction
+    ? typingAction === 'SendMessageRecordAudioAction'
+      ? 'Recording response...'
+      : typingAction === 'SendMessageUploadAudioAction'
+        ? 'Sending audio...'
+        : 'Typing response...'
+    : 'Transcribing...'
+
   // ─── Render ───────────────────────────────────────────────────────────────
   const isRecording = status === 'recording'
   const isWaiting = status === 'waiting'
@@ -1243,10 +1268,17 @@ export default function App() {
         )}
       </div>
 
-      <div className="controls">
+      <div className={`controls ${pttActive ? 'ptt-active' : ''} ${pttRecording ? 'ptt-recording' : ''} ${pttWaiting ? 'ptt-waiting' : ''}`}>
+        {/* PTT waiting status message */}
+        {pttWaiting && (
+          <div className="ptt-status-message">
+            <div className="spinner" />
+            <span>{waitingDetail}</span>
+          </div>
+        )}
         <div className="controls-row">
           {/* Left group: speed + silence only (grid col 1) */}
-          <div className="controls-left">
+          <div className="controls-left controls-fadeable">
             <div className="speed-controls">
               <span>Speed</span>
               {[1, 1.25, 1.5, 2].map((s) => (
@@ -1274,7 +1306,7 @@ export default function App() {
           </div>
 
           {/* Narrow-only left: status shown left of PTT in portrait (hidden on wide) */}
-          <div className="narrow-left">
+          <div className="narrow-left controls-fadeable">
             <div className={`status-indicator ${status}`}>
               {STATUS_ICONS[status]} {STATUS_LABELS[status]}
             </div>
@@ -1300,7 +1332,7 @@ export default function App() {
             <button
               ref={pttBtnRef}
               className={`ptt-btn ${isRecording ? 'recording' : ''} ${cancelHover ? 'cancel-hover' : ''}`}
-              disabled={recordingCooldown || vadEnabled}
+              disabled={recordingCooldown || vadEnabled || pttWaiting}
               onMouseDown={(e) => {
                 if (touchActiveRef.current) return; e.preventDefault()
                 pttStartXRef.current = e.clientX
@@ -1337,7 +1369,7 @@ export default function App() {
           </div>
 
           {/* Right group: status + buttons (grid col 3) */}
-          <div className="controls-right">
+          <div className="controls-right controls-fadeable">
             <div className={`status-indicator ${status}`}>
               {STATUS_ICONS[status]} {STATUS_LABELS[status]}
             </div>
@@ -1374,7 +1406,7 @@ export default function App() {
         </div>
 
         {/* Level meter + threshold handle */}
-        <div className="threshold-bar-wrap" title="Drag to set VAD threshold">
+        <div className="threshold-bar-wrap controls-fadeable" title="Drag to set VAD threshold">
           <div className="threshold-fill" id="threshFill" />
           <div className="threshold-handle" id="threshHandle" />
         </div>

@@ -1022,6 +1022,40 @@ button:disabled {
   margin-top: 10px;
 }
 
+/* ─── PTT context-aware controls ─────────────────────────────────────────── */
+.controls-fadeable {
+  transition: opacity 0.18s ease, visibility 0.18s ease;
+}
+
+.controls.ptt-active .controls-fadeable {
+  opacity: 0;
+  visibility: hidden;
+  pointer-events: none;
+}
+
+.ptt-status-message {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 4px 0;
+  font-size: 0.82rem;
+  color: var(--blue);
+  animation: statusFadeIn 0.2s ease-out;
+}
+
+@keyframes statusFadeIn {
+  from { opacity: 0; transform: translateY(4px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+.controls.ptt-waiting .ptt-btn {
+  opacity: 0.4;
+  cursor: not-allowed;
+  animation: none;
+  background: var(--surface2);
+}
+
 /* ─── Narrow portrait: speed+silence above, status left of PTT ──────────── */
 @media (max-width: 440px) {
   .controls-row {
