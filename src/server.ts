@@ -5,12 +5,40 @@ import { createServer } from 'http';
 import dotenv from 'dotenv';
 import fs from 'fs';
 import { join } from 'path';
+import { tmpdir } from 'os';
+import { randomBytes } from 'crypto';
+import ffmpeg from 'fluent-ffmpeg';
+import ffmpegStatic from 'ffmpeg-static';
 import { TelegramClient } from 'telegram';
 import { StringSession } from 'telegram/sessions/index.js';
 import { NewMessage, NewMessageEvent } from 'telegram/events/index.js';
 import { CustomFile } from 'telegram/client/uploads.js';
 
 dotenv.config();
+
+// Configure ffmpeg path (bundled static binary)
+if (ffmpegStatic) ffmpeg.setFfmpegPath(ffmpegStatic);
+
+/** Convert any audio format (WebM, MP4, etc.) to OGG Opus for Telegram voice notes */
+async function convertToOgg(inputBuffer: Buffer): Promise<Buffer> {
+  const id = randomBytes(8).toString('hex');
+  const inputPath = join(tmpdir(), `vc_in_${id}`);
+  const outputPath = join(tmpdir(), `vc_out_${id}.ogg`);
+  await fs.promises.writeFile(inputPath, inputBuffer);
+  await new Promise<void>((resolve, reject) => {
+    ffmpeg(inputPath)
+      .outputOptions(['-c:a libopus', '-b:a 64k', '-vn'])
+      .save(outputPath)
+      .on('end', () => resolve())
+      .on('error', (err: Error) => reject(err));
+  });
+  const out = await fs.promises.readFile(outputPath);
+  await Promise.all([
+    fs.promises.unlink(inputPath).catch(() => {}),
+    fs.promises.unlink(outputPath).catch(() => {}),
+  ]);
+  return out;
+}
 
 const PORT = parseInt(process.env.PORT || process.env.BACKEND_PORT || '3000');
 const TELEGRAM_API_ID = parseInt(process.env.TELEGRAM_API_ID || '0');
@@ -242,7 +270,16 @@ app.post('/api/send-voice', upload.single('audio'), async (req, res) => {
     }
 
     const targetChatId = parseChatId(currentTargetChatId);
-    const buffer = Buffer.from(req.file.buffer);
+    const rawBuffer = Buffer.from(req.file.buffer);
+
+    // Convert to OGG Opus so Telegram classifies it as a voice note, not video/webm
+    let buffer = rawBuffer;
+    try {
+      buffer = await convertToOgg(rawBuffer);
+      console.log(`[Send Voice] Converted ${rawBuffer.length}b → ${buffer.length}b OGG`);
+    } catch (convErr) {
+      console.warn('[Send Voice] ffmpeg conversion failed, sending raw:', convErr);
+    }
 
     await telegramClient.sendFile(
       targetChatId as Parameters<typeof telegramClient.sendFile>[0],
