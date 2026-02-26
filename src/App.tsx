@@ -641,14 +641,14 @@ export default function App() {
     updateStatus('recording')
     soundVadSpeechStart()
 
-    // Safety timeout: force-stop recording after 120s to prevent stuck state
-    // (30s was too aggressive — caused mid-sentence cutoffs on longer voice messages)
+    // Safety timeout: force-stop recording after 300s (5 min) to prevent stuck state
+    // (30s was too aggressive, 120s still cut off longer recordings)
     setTimeout(() => {
       if (statusRef.current === 'recording' && mediaRecorderRef.current?.state !== 'inactive') {
-        console.warn('VAD recording safety timeout (120s) — force stopping')
+        console.warn('VAD recording safety timeout (300s) — force stopping')
         vadStopRecording()
       }
-    }, 120000)
+    }, 300000)
   }, [updateStatus])
 
   const vadStopRecording = useCallback(() => {
