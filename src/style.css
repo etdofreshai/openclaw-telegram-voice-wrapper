@@ -552,6 +552,62 @@ button:disabled {
   animation: pulse 1s ease-in-out infinite;
 }
 
+/* ─── PTT Zone with swipe-to-cancel ───────────────────────────────────── */
+.ptt-zone {
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.cancel-zone {
+  position: absolute;
+  right: calc(100% + 8px);
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 14px;
+  border-radius: 20px;
+  background: rgba(243, 139, 168, 0.08);
+  border: 1px solid rgba(243, 139, 168, 0.2);
+  white-space: nowrap;
+  animation: cancelSlideIn 0.25s ease-out;
+  transition: background 0.15s, border-color 0.15s, box-shadow 0.15s;
+}
+
+.cancel-zone.active {
+  background: rgba(243, 139, 168, 0.25);
+  border-color: var(--red);
+  box-shadow: 0 0 12px rgba(243, 139, 168, 0.3);
+}
+
+.cancel-zone-icon {
+  font-size: 1rem;
+  font-weight: 700;
+  color: var(--red);
+}
+
+.cancel-zone-label {
+  font-size: 0.72rem;
+  color: var(--subtext0);
+  letter-spacing: 0.02em;
+}
+
+.cancel-zone.active .cancel-zone-label {
+  color: var(--red);
+}
+
+@keyframes cancelSlideIn {
+  from { opacity: 0; transform: translateX(12px); }
+  to { opacity: 1; transform: translateX(0); }
+}
+
+.ptt-btn.cancel-hover {
+  background: var(--red) !important;
+  transform: scale(0.92) !important;
+  animation: none !important;
+}
+
 .cancel-recording-btn {
   display: flex;
   align-items: center;

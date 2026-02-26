@@ -134,6 +134,9 @@ export default function App() {
   const [recordingCooldown, setRecordingCooldown] = useState(false)
   const [ttsPlaying, setTtsPlaying] = useState(false)
   const [tooShortToast, setTooShortToast] = useState(false)
+  const [cancelHover, setCancelHover] = useState(false)
+  const pttBtnRef = useRef<HTMLButtonElement>(null)
+  const pttStartXRef = useRef(0)
   const [playbackSpeed, setPlaybackSpeed] = useState(() => {
     try { return parseFloat(localStorage.getItem('voice-playback-speed') || '1') || 1 }
     catch { return 1 }
@@ -1223,58 +1226,77 @@ export default function App() {
 
           {/* Narrow-only left: status shown left of PTT in portrait (hidden on wide) */}
           <div className="narrow-left">
-            {isRecording ? (
+            <div className={`status-indicator ${status}`}>
+              {STATUS_ICONS[status]} {STATUS_LABELS[status]}
+            </div>
+            {!micActivated && (
               <button
-                className="cancel-recording-btn"
-                onClick={cancelManualRecording}
-                title="Cancel recording"
+                className="btn"
+                title="Activate microphone"
+                onClick={() => { unlockAudio(); unlockAudioCtx(); startMeter() }}
               >
-                ✕
+                👂
               </button>
-            ) : (
-              <>
-                <div className={`status-indicator ${status}`}>
-                  {STATUS_ICONS[status]} {STATUS_LABELS[status]}
-                </div>
-                {!micActivated && (
-                  <button
-                    className="btn"
-                    title="Activate microphone"
-                    onClick={() => { unlockAudio(); unlockAudioCtx(); startMeter() }}
-                  >
-                    👂
-                  </button>
-                )}
-              </>
             )}
           </div>
 
-          {/* Hold-to-talk (grid col 2 — always centered) */}
-          <button
-            className={`ptt-btn ${isRecording ? 'recording' : ''}`}
-            disabled={recordingCooldown || vadEnabled}
-            onMouseDown={(e) => { if (touchActiveRef.current) return; e.preventDefault(); startManualRecording() }}
-            onMouseUp={() => { if (touchActiveRef.current) return; if (isRecording) stopManualRecording() }}
-            onMouseLeave={() => { if (touchActiveRef.current) return; if (isRecording) stopManualRecording() }}
-            onTouchStart={(e) => { e.preventDefault(); touchActiveRef.current = true; startManualRecording() }}
-            onTouchEnd={(e) => { e.preventDefault(); if (isRecording) stopManualRecording(); setTimeout(() => { touchActiveRef.current = false }, 1000) }}
-            onContextMenu={(e) => e.preventDefault()}
-            title="Hold to talk"
-          >
-            🎙️
-          </button>
+          {/* Hold-to-talk with swipe-to-cancel */}
+          <div className={`ptt-zone ${isRecording ? 'recording' : ''}`}>
+            {isRecording && (
+              <div className={`cancel-zone ${cancelHover ? 'active' : ''}`}>
+                <span className="cancel-zone-icon">✕</span>
+                <span className="cancel-zone-label">slide to cancel</span>
+              </div>
+            )}
+            <button
+              ref={pttBtnRef}
+              className={`ptt-btn ${isRecording ? 'recording' : ''} ${cancelHover ? 'cancel-hover' : ''}`}
+              disabled={recordingCooldown || vadEnabled}
+              onMouseDown={(e) => {
+                if (touchActiveRef.current) return; e.preventDefault()
+                pttStartXRef.current = e.clientX
+                startManualRecording()
+              }}
+              onMouseMove={(e) => {
+                if (touchActiveRef.current || !isRecording) return
+                const dx = pttStartXRef.current - e.clientX
+                setCancelHover(dx > 80)
+              }}
+              onMouseUp={() => {
+                if (touchActiveRef.current) return
+                if (isRecording) { if (cancelHover) { cancelManualRecording(); setCancelHover(false) } else stopManualRecording() }
+                setCancelHover(false)
+              }}
+              onMouseLeave={() => {
+                if (touchActiveRef.current) return
+                if (isRecording) { if (cancelHover) { cancelManualRecording() } else stopManualRecording() }
+                setCancelHover(false)
+              }}
+              onTouchStart={(e) => {
+                e.preventDefault(); touchActiveRef.current = true
+                pttStartXRef.current = e.touches[0].clientX
+                startManualRecording()
+              }}
+              onTouchMove={(e) => {
+                if (!isRecording) return
+                const dx = pttStartXRef.current - e.touches[0].clientX
+                setCancelHover(dx > 80)
+              }}
+              onTouchEnd={(e) => {
+                e.preventDefault()
+                if (isRecording) { if (cancelHover) { cancelManualRecording() } else stopManualRecording() }
+                setCancelHover(false)
+                setTimeout(() => { touchActiveRef.current = false }, 1000)
+              }}
+              onContextMenu={(e) => e.preventDefault()}
+              title="Hold to talk — slide left to cancel"
+            >
+              {cancelHover ? '✕' : '🎙️'}
+            </button>
+          </div>
 
           {/* Right group: status + buttons (grid col 3) */}
           <div className="controls-right">
-            {isRecording && (
-              <button
-                className="cancel-recording-btn"
-                onClick={cancelManualRecording}
-                title="Cancel recording"
-              >
-                ✕ Cancel
-              </button>
-            )}
             <div className={`status-indicator ${status}`}>
               {STATUS_ICONS[status]} {STATUS_LABELS[status]}
             </div>
