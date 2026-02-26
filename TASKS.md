@@ -1,17 +1,6 @@
 # Tasks & Roadmap
 
-## 1. Fix Recording UI Overlap with Swipe-to-Cancel
-**Priority:** High  
-**Status:** Pending
 
-Move the recording status message from its current position (middle/bottom) to the **top of the container** so it doesn't overlap with the swipe-to-cancel zone.
-
-**Details:**
-- Recording status should appear at the top
-- Should not interfere with the left cancel area or PTT button zone
-- Clean, minimal layout
-
----
 
 ## 2. Context-Aware Bottom Bar - Push-to-Talk Mode
 **Priority:** High  
@@ -86,3 +75,4 @@ The Telegram "is typing" indicator stays active even after the audio response ha
 - ✅ Fixed swipe-to-cancel triggering prematurely on Windows mouse drag
 - ✅ Auto-mark individual messages as read when received
 - ✅ Mark all messages in channel as read when channel is selected
+- ✅ Fixed recording UI overlap — aligned recording status to top of PTT button
