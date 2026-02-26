@@ -986,3 +986,27 @@ button:disabled {
   color: var(--red);
   font-size: 0.82rem;
 }
+
+/* Too-short recording toast */
+.toast-too-short {
+  position: fixed;
+  top: 80px;
+  left: 50%;
+  transform: translateX(-50%);
+  background: rgba(243, 139, 168, 0.95);
+  color: #1e1e2e;
+  padding: 8px 18px;
+  border-radius: 20px;
+  font-size: 0.85rem;
+  font-weight: 600;
+  z-index: 1000;
+  animation: toast-fade 2s ease-in-out;
+  pointer-events: none;
+}
+
+@keyframes toast-fade {
+  0% { opacity: 0; transform: translateX(-50%) translateY(-8px); }
+  15% { opacity: 1; transform: translateX(-50%) translateY(0); }
+  75% { opacity: 1; }
+  100% { opacity: 0; }
+}

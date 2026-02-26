@@ -133,6 +133,7 @@ export default function App() {
   const [micActivated, setMicActivated] = useState(false)
   const [recordingCooldown, setRecordingCooldown] = useState(false)
   const [ttsPlaying, setTtsPlaying] = useState(false)
+  const [tooShortToast, setTooShortToast] = useState(false)
   const [playbackSpeed, setPlaybackSpeed] = useState(() => {
     try { return parseFloat(localStorage.getItem('voice-playback-speed') || '1') || 1 }
     catch { return 1 }
@@ -700,6 +701,25 @@ export default function App() {
     const mr = mediaRecorderRef.current
     if (!mr || mr.state === 'inactive') return
     isStoppingRef.current = true
+
+    const duration = Date.now() - recordingStartRef.current
+    const MIN_PTT_DURATION_MS = 2500
+
+    if (duration < MIN_PTT_DURATION_MS) {
+      // Too short — cancel recording, don't send
+      cancelRecordingRef.current = true
+      soundTooShort()
+      setTooShortToast(true)
+      setTimeout(() => setTooShortToast(false), 2000)
+      updateStatus('idle')
+      const captured = mr
+      setTimeout(() => {
+        if (captured.state !== 'inactive') captured.stop()
+        isStoppingRef.current = false
+      }, 100)
+      return
+    }
+
     updateStatus('waiting')
     soundRecordStop()
     const captured = mr
@@ -975,6 +995,9 @@ export default function App() {
 
   return (
     <div className="app">
+      {tooShortToast && (
+        <div className="toast-too-short">Hold longer to record (2.5s min)</div>
+      )}
       <header>
         {/* Left: back button (returns to chat picker) */}
         <div className="header-left">
