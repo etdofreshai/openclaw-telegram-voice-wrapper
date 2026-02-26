@@ -552,6 +552,36 @@ button:disabled {
   animation: pulse 1s ease-in-out infinite;
 }
 
+.cancel-recording-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 42px;
+  height: 42px;
+  border-radius: 21px;
+  background: rgba(243, 139, 168, 0.15);
+  border: 2px solid var(--red);
+  color: var(--red);
+  font-size: 1rem;
+  font-weight: 700;
+  cursor: pointer;
+  padding: 0 12px;
+  gap: 4px;
+  transition: background 0.15s, transform 0.1s;
+  animation: cancelFadeIn 0.2s ease-out;
+}
+.cancel-recording-btn:hover {
+  background: rgba(243, 139, 168, 0.3);
+  transform: scale(1.05);
+}
+.cancel-recording-btn:active {
+  transform: scale(0.95);
+}
+@keyframes cancelFadeIn {
+  from { opacity: 0; transform: scale(0.8); }
+  to { opacity: 1; transform: scale(1); }
+}
+
 .recording-toggle {
   background: var(--red) !important;
   color: #fff !important;

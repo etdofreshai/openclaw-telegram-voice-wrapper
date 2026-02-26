@@ -112,3 +112,9 @@ export function soundTooShort() {
   playTone(370, 0.12, 'square', 0.25);
   playTone(280, 0.18, 'square', 0.25, 0.1);
 }
+
+export function soundCancel() {
+  playTone(440, 0.08, 'square', 0.2);
+  playTone(330, 0.08, 'square', 0.2, 0.08);
+  playTone(220, 0.12, 'square', 0.2, 0.16);
+}

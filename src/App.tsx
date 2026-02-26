@@ -6,7 +6,7 @@ import {
   soundRecordStart, soundRecordStop, soundSendSuccess, soundError,
   soundVadSpeechStart,
   soundVadListening, soundTooShort, soundCalibrationBeep, unlockAudioCtx,
-  startThinkingSound, stopThinkingSound,
+  startThinkingSound, stopThinkingSound, soundCancel,
 } from './sounds'
 
 const BASE = import.meta.env.BASE_URL
@@ -740,6 +740,23 @@ export default function App() {
     }, 500)
   }, [updateStatus])
 
+  const cancelManualRecording = useCallback(() => {
+    const mr = mediaRecorderRef.current
+    if (!mr || mr.state === 'inactive') return
+    cancelRecordingRef.current = true
+    audioChunksRef.current = []
+    soundCancel()
+    if (vadRef.current && vadEnabledRef.current) {
+      updateStatus('listening')
+    } else {
+      updateStatus('idle')
+    }
+    isStoppingRef.current = false
+    setTimeout(() => {
+      if (mr.state !== 'inactive') mr.stop()
+    }, 100)
+  }, [updateStatus])
+
   const processRecording = useCallback(async () => {
     const duration = Date.now() - recordingStartRef.current
     const chunks = audioChunksRef.current
@@ -1206,17 +1223,29 @@ export default function App() {
 
           {/* Narrow-only left: status shown left of PTT in portrait (hidden on wide) */}
           <div className="narrow-left">
-            <div className={`status-indicator ${status}`}>
-              {STATUS_ICONS[status]} {STATUS_LABELS[status]}
-            </div>
-            {!micActivated && (
+            {isRecording ? (
               <button
-                className="btn"
-                title="Activate microphone"
-                onClick={() => { unlockAudio(); unlockAudioCtx(); startMeter() }}
+                className="cancel-recording-btn"
+                onClick={cancelManualRecording}
+                title="Cancel recording"
               >
-                👂
+                ✕
               </button>
+            ) : (
+              <>
+                <div className={`status-indicator ${status}`}>
+                  {STATUS_ICONS[status]} {STATUS_LABELS[status]}
+                </div>
+                {!micActivated && (
+                  <button
+                    className="btn"
+                    title="Activate microphone"
+                    onClick={() => { unlockAudio(); unlockAudioCtx(); startMeter() }}
+                  >
+                    👂
+                  </button>
+                )}
+              </>
             )}
           </div>
 
@@ -1237,6 +1266,15 @@ export default function App() {
 
           {/* Right group: status + buttons (grid col 3) */}
           <div className="controls-right">
+            {isRecording && (
+              <button
+                className="cancel-recording-btn"
+                onClick={cancelManualRecording}
+                title="Cancel recording"
+              >
+                ✕ Cancel
+              </button>
+            )}
             <div className={`status-indicator ${status}`}>
               {STATUS_ICONS[status]} {STATUS_LABELS[status]}
             </div>
