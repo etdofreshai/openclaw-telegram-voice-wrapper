@@ -1050,7 +1050,9 @@ button:disabled {
     flex: 1 1 0;
     flex-direction: column;
     align-items: flex-start;
+    align-self: flex-start;
     gap: 4px;
+    padding-top: 8px;
   }
 
   .controls-right {
