@@ -351,6 +351,13 @@ app.post('/api/select-chat', (req, res) => {
   currentTargetChatId = chatId.trim();
   console.log(`[Chat] Target chat changed to: ${currentTargetChatId}`);
 
+  // Mark all messages as read in the selected chat (non-blocking)
+  if (telegramClient && telegramConnected) {
+    telegramClient.markAsRead(parseChatId(currentTargetChatId) as any)
+      .then(() => console.log(`[Chat] Marked all messages as read in ${currentTargetChatId}`))
+      .catch((err: any) => console.warn(`[Chat] Failed to mark as read:`, err?.message || err));
+  }
+
   broadcastToClients({ type: 'chat_selected', chatId: currentTargetChatId });
   res.json({ ok: true, chatId: currentTargetChatId });
 });
