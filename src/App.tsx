@@ -745,14 +745,14 @@ export default function App() {
       setTimeout(() => {
         if (mr.state !== 'inactive') {
           console.warn('PTT recording safety timeout (300s) — force stopping')
-          stopManualRecording()
+          mr.stop()
         }
       }, 300000)
     } catch (err) {
       console.error('Mic error:', err)
       alert('Could not access microphone.')
     }
-  }, [recordingCooldown, vadEnabled, unlockAudio, updateStatus, startMeter, stopManualRecording])
+  }, [recordingCooldown, vadEnabled, unlockAudio, updateStatus, startMeter])
 
   const stopManualRecording = useCallback(() => {
     if (isStoppingRef.current) return  // guard against double-fire (touch + synthetic mouse events)
