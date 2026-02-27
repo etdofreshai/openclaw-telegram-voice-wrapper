@@ -660,7 +660,7 @@ export default function App() {
       processRecording()
     }
 
-    mr.start()
+    mr.start(1000) // collect chunks every 1s to avoid browser buffer limits on long recordings
     recordingStartRef.current = Date.now()
     updateStatus('recording')
     soundVadSpeechStart()
@@ -736,15 +736,23 @@ export default function App() {
         }
         processRecording()
       }
-      mr.start()
+      mr.start(1000) // collect chunks every 1s to avoid browser buffer limits on long recordings
       recordingStartRef.current = Date.now()
       updateStatus('recording')
       soundRecordStart()
+
+      // Safety timeout: force-stop PTT recording after 300s (5 min)
+      setTimeout(() => {
+        if (mr.state !== 'inactive') {
+          console.warn('PTT recording safety timeout (300s) — force stopping')
+          stopManualRecording()
+        }
+      }, 300000)
     } catch (err) {
       console.error('Mic error:', err)
       alert('Could not access microphone.')
     }
-  }, [recordingCooldown, vadEnabled, unlockAudio, updateStatus, startMeter])
+  }, [recordingCooldown, vadEnabled, unlockAudio, updateStatus, startMeter, stopManualRecording])
 
   const stopManualRecording = useCallback(() => {
     if (isStoppingRef.current) return  // guard against double-fire (touch + synthetic mouse events)
