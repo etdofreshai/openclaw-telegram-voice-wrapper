@@ -279,6 +279,13 @@ export default function App() {
       }
       return
     }
+
+    // Don't attempt playback while page is hidden — items stay queued,
+    // visibilitychange handler will trigger playback when tab resumes
+    if (document.visibilityState === 'hidden') {
+      return
+    }
+
     const url = queue.shift()!
     setAudioQueueLen(queue.length)
     ttsPlayingRef.current = true
@@ -290,6 +297,14 @@ export default function App() {
     a.playbackRate = playbackSpeedRef.current
     a.play().catch((e) => {
       console.warn('Audio play failed:', e)
+      // If page went hidden between shift and play, re-queue for later
+      if (document.visibilityState === 'hidden') {
+        queue.unshift(url)
+        setAudioQueueLen(queue.length)
+        ttsPlayingRef.current = false
+        setTtsPlaying(false)
+        return
+      }
       setMessages((prev) => [...prev, {
         role: 'assistant',
         text: `⚠️ Audio playback failed: ${(e as Error)?.message || e}`,
@@ -305,7 +320,9 @@ export default function App() {
   const enqueueAudio = useCallback((url: string) => {
     audioQueueRef.current.push(url)
     setAudioQueueLen(audioQueueRef.current.length)
-    if (!ttsPlayingRef.current) {
+    // Only start playback if page is visible — otherwise items stay queued
+    // and the visibilitychange handler will flush the queue on resume
+    if (!ttsPlayingRef.current && document.visibilityState === 'visible') {
       playNextInQueue()
     }
   }, [playNextInQueue])
@@ -363,11 +380,15 @@ export default function App() {
           const quotedText = msg.quotedText || ''
           if ((text || quotedText) && text !== 'NO_REPLY' && text !== 'HEARTBEAT_OK') {
             upsertMessage(msg.messageId, { role: 'assistant', text, quotedText: quotedText || undefined, messageId: msg.messageId, timestamp: msg.timestamp || Date.now() })
-            // Resume VAD after text-only response (no voice to play)
-            if (statusRef.current === 'waiting' && vadRef.current && vadEnabledRef.current) {
-              vadRef.current.resume()
-              updateStatus('listening')
-              soundVadListening()
+            // Resume interactive mode after text-only response (no voice to play)
+            if (statusRef.current === 'waiting') {
+              if (vadRef.current && vadEnabledRef.current) {
+                vadRef.current.resume()
+                updateStatus('listening')
+                soundVadListening()
+              } else {
+                updateStatus('idle')
+              }
             }
           }
         } else if (msg.type === 'text_update') {
@@ -1016,6 +1037,65 @@ export default function App() {
     }
   }, [connectWs])
 
+  // ─── Visibility recovery: handle tab/app backgrounding ─────────────────
+  useEffect(() => {
+    const handleVisibilityChange = () => {
+      if (document.visibilityState !== 'visible') return
+
+      const audio = ttsAudioRef.current
+      const queueLen = audioQueueRef.current.length
+      const currentStatus = statusRef.current
+
+      // Case 1: Audio element was paused by the browser during background —
+      // try to resume it
+      if (currentStatus === 'playing' && audio && audio.paused && !audio.ended && audio.src) {
+        audio.play().catch(() => {
+          ttsPlayingRef.current = false
+          setTtsPlaying(false)
+          playNextInQueue()
+        })
+        return
+      }
+
+      // Case 2: Queued audio that couldn't start while hidden — flush now
+      if (queueLen > 0 && !ttsPlayingRef.current) {
+        playNextInQueue()
+        return
+      }
+
+      // Case 3: Status stuck on 'playing' but nothing actually playing
+      if (currentStatus === 'playing' && !ttsPlayingRef.current && queueLen === 0) {
+        if (vadRef.current && vadEnabledRef.current) {
+          vadRef.current.resume()
+          updateStatus('listening')
+          soundVadListening()
+        } else {
+          updateStatus('idle')
+        }
+        return
+      }
+
+      // Case 4: Status stuck on 'waiting' with nothing pending —
+      // give a brief grace period for WS messages to arrive after reconnect
+      if (currentStatus === 'waiting' && queueLen === 0 && !ttsPlayingRef.current) {
+        setTimeout(() => {
+          if (statusRef.current === 'waiting' && audioQueueRef.current.length === 0 && !ttsPlayingRef.current) {
+            if (vadRef.current && vadEnabledRef.current) {
+              vadRef.current.resume()
+              updateStatus('listening')
+              soundVadListening()
+            } else {
+              updateStatus('idle')
+            }
+          }
+        }, 3000)
+      }
+    }
+
+    document.addEventListener('visibilitychange', handleVisibilityChange)
+    return () => document.removeEventListener('visibilitychange', handleVisibilityChange)
+  }, [playNextInQueue, updateStatus])
+
   // ─── Document-level mouse tracking for PTT drag-to-cancel ──────────────────
   useEffect(() => {
     const onMouseMove = (e: MouseEvent) => {
@@ -1088,7 +1168,7 @@ export default function App() {
       : typingAction === 'SendMessageUploadAudioAction'
         ? 'Sending audio...'
         : 'Typing response...'
-    : 'Transcribing...'
+    : 'Waiting for audio...'
 
   // ─── Render ───────────────────────────────────────────────────────────────
   const isRecording = status === 'recording'
