@@ -150,8 +150,8 @@ async function connectTelegram(): Promise<void> {
         console.error('[Telegram] Failed to mark as read:', err);
       }
 
-      // Clear typing indicator when a message arrives
-      broadcastToClients({ type: 'typing_stop' });
+      // Clear typing indicator when a message arrives (scoped to this chat)
+      broadcastToClients({ type: 'typing_stop', chatId: currentTargetChatId });
 
       // Handle voice message (include caption text if present)
       if (message.voice) {
@@ -202,8 +202,10 @@ async function connectTelegram(): Promise<void> {
       // ── Typing indicators ──
       if (cn === 'UpdateChatUserTyping' || cn === 'UpdateUserTyping') {
         if (!currentTargetChatId) return;
+        // Capture chatId before any async work to avoid race conditions
+        const capturedChatId = currentTargetChatId;
         // Filter by target chat
-        const targetStr = String(parseChatId(currentTargetChatId)).replace(/^-?/, '');
+        const targetStr = String(parseChatId(capturedChatId)).replace(/^-?/, '');
         const chatIdStr = String(u.chatId || u.userId || '');
         if (!chatIdStr.includes(targetStr)) return;
 
@@ -218,7 +220,9 @@ async function connectTelegram(): Promise<void> {
             senderName = e.firstName || e.username || e.title || 'OpenClaw';
           }
         } catch { /* fall back to default */ }
-        broadcastToClients({ type: 'typing', action, senderName, chatId: currentTargetChatId, timestamp: Date.now() });
+        // Only broadcast if the target chat hasn't changed during async work
+        if (capturedChatId !== currentTargetChatId) return;
+        broadcastToClients({ type: 'typing', action, senderName, chatId: capturedChatId, timestamp: Date.now() });
         return;
       }
 

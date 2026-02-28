@@ -211,7 +211,12 @@ export default function App() {
   useEffect(() => { ttsPlayingRef.current = ttsPlaying }, [ttsPlaying])
   useEffect(() => { vadEnabledRef.current = vadEnabled }, [vadEnabled])
   useEffect(() => { typingSenderRef.current = typingSender }, [typingSender])
-  useEffect(() => { selectedChatIdRef.current = selectedChatId }, [selectedChatId])
+  useEffect(() => {
+    selectedChatIdRef.current = selectedChatId
+    // Clear typing indicator when switching chats to prevent cross-chat leaks
+    setTypingAction(null)
+    if (typingTimeoutRef.current) { clearTimeout(typingTimeoutRef.current); typingTimeoutRef.current = null }
+  }, [selectedChatId])
 
   // Play doot-doot-doot loop while Telegram typing indicator is active
   useEffect(() => {
@@ -383,8 +388,11 @@ export default function App() {
             typingTimeoutRef.current = setTimeout(() => setTypingAction(null), 6000)
           }
         } else if (msg.type === 'typing_stop') {
-          setTypingAction(null)
-          if (typingTimeoutRef.current) clearTimeout(typingTimeoutRef.current)
+          // Only clear typing if the stop is for our selected chat (or unscoped)
+          if (!msg.chatId || !selectedChatIdRef.current || msg.chatId === selectedChatIdRef.current) {
+            setTypingAction(null)
+            if (typingTimeoutRef.current) clearTimeout(typingTimeoutRef.current)
+          }
         } else if (msg.type === 'telegram_connected') {
           setTelegramConnected(true)
         } else if (msg.type === 'telegram_disconnected') {
