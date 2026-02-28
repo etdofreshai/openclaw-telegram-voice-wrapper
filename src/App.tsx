@@ -174,6 +174,7 @@ export default function App() {
   const touchActiveRef = useRef(false)
   const mouseDownRef = useRef(false)
   const audioQueueRef = useRef<string[]>([])
+  const safetyTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const ttsAudioRef = useRef<HTMLAudioElement | null>(null)
   const ttsPlayingRef = useRef(false)
   const statusRef = useRef<AppStatus>('idle')
@@ -585,6 +586,7 @@ export default function App() {
           mediaRecorderRef.current?.stop()
         }
       }
+      if (safetyTimerRef.current) { clearTimeout(safetyTimerRef.current); safetyTimerRef.current = null }
       if (vadRef.current) { vadRef.current.stop(); vadRef.current = null }
       // Reset to idle unless audio is actively playing (let it finish)
       if (statusRef.current !== 'playing') updateStatus('idle')
@@ -673,9 +675,12 @@ export default function App() {
     updateStatus('recording')
     soundVadSpeechStart()
 
-    // Safety timeout: force-stop recording after 300s (5 min) to prevent stuck state
-    // (30s was too aggressive, 120s still cut off longer recordings)
-    setTimeout(() => {
+    // Safety timeout: force-stop recording after 300s (5 min) to prevent stuck state.
+    // Clear any previous safety timer first to prevent stale timeouts from earlier
+    // recording cycles from cascading and cutting off later recordings (~20s apart).
+    if (safetyTimerRef.current) clearTimeout(safetyTimerRef.current)
+    safetyTimerRef.current = setTimeout(() => {
+      safetyTimerRef.current = null
       if (statusRef.current === 'recording' && mediaRecorderRef.current?.state !== 'inactive') {
         console.warn('VAD recording safety timeout (300s) — force stopping')
         vadStopRecording()
@@ -686,6 +691,9 @@ export default function App() {
   const vadStopRecording = useCallback(() => {
     const mr = mediaRecorderRef.current
     if (!mr || mr.state === 'inactive') return
+
+    // Clear safety timer — recording is ending normally
+    if (safetyTimerRef.current) { clearTimeout(safetyTimerRef.current); safetyTimerRef.current = null }
 
     const MIN_VAD_DURATION_MS = 2500
     const duration = Date.now() - recordingStartRef.current
