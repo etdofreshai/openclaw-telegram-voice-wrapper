@@ -381,14 +381,19 @@ export default function App() {
           if ((text || quotedText) && text !== 'NO_REPLY' && text !== 'HEARTBEAT_OK') {
             upsertMessage(msg.messageId, { role: 'assistant', text, quotedText: quotedText || undefined, messageId: msg.messageId, timestamp: msg.timestamp || Date.now() })
             // Resume interactive mode after text-only response (no voice to play)
+            // Wait 1.5s to avoid re-arming VAD before audio arrives
             if (statusRef.current === 'waiting') {
-              if (vadRef.current && vadEnabledRef.current) {
-                vadRef.current.resume()
-                updateStatus('listening')
-                soundVadListening()
-              } else {
-                updateStatus('idle')
-              }
+              setTimeout(() => {
+                if (statusRef.current === 'waiting' && !ttsPlayingRef.current && audioQueueRef.current.length === 0) {
+                  if (vadRef.current && vadEnabledRef.current) {
+                    vadRef.current.resume()
+                    updateStatus('listening')
+                    soundVadListening()
+                  } else {
+                    updateStatus('idle')
+                  }
+                }
+              }, 1500)
             }
           }
         } else if (msg.type === 'text_update') {
@@ -1176,6 +1181,23 @@ export default function App() {
   const isPlaying = status === 'playing'
   const chatTitle = dialogs.find((d) => d.id === selectedChatId)?.title || 'Bot'
 
+  // Interrupt TTS and re-arm VAD immediately
+  const interruptAndRecord = useCallback(() => {
+    if (ttsAudioRef.current) {
+      ttsAudioRef.current.pause()
+      ttsAudioRef.current.currentTime = 0
+    }
+    audioQueueRef.current = []
+    ttsPlayingRef.current = false
+    setTtsPlaying(false)
+    setAudioQueueLen(0)
+    if (vadRef.current && vadEnabledRef.current) {
+      vadRef.current.resume()
+      updateStatus('listening')
+      soundVadListening()
+    }
+  }, [])
+
   // Auth gate
   if (!authChecked) {
     return (
@@ -1390,8 +1412,14 @@ export default function App() {
               {status === 'waiting' && (
                 <span className="vad-bar-status-text"><div className="spinner" /> {waitingDetail}</span>
               )}
+              {status === 'waiting' && (
+                <button className="vad-interrupt-btn" onClick={interruptAndRecord}>⏸ Interrupt</button>
+              )}
               {status === 'playing' && (
                 <span className="vad-bar-status-text">🔊 Playing response…</span>
+              )}
+              {status === 'playing' && (
+                <button className="vad-interrupt-btn" onClick={interruptAndRecord}>⏸ Interrupt</button>
               )}
               {status === 'idle' && (
                 <span className="vad-bar-status-text">VAD Active</span>

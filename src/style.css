@@ -1248,3 +1248,17 @@ button:disabled {
   75% { opacity: 1; }
   100% { opacity: 0; }
 }
+
+.vad-interrupt-btn {
+  background: rgba(137, 180, 250, 0.15);
+  border: 1px solid rgba(137, 180, 250, 0.4);
+  color: #89b4fa;
+  border-radius: 8px;
+  padding: 6px 14px;
+  font-size: 0.8rem;
+  cursor: pointer;
+  margin-top: 6px;
+}
+.vad-interrupt-btn:active {
+  background: rgba(137, 180, 250, 0.3);
+}
