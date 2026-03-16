@@ -5,11 +5,10 @@ WORKDIR /app
 COPY package.json package-lock.json* ./
 RUN npm ci
 COPY . .
-ARG GIT_SHA=unknown
-ARG BUILD_TIME=unknown
-ENV VITE_GIT_SHA=$GIT_SHA
-ENV VITE_BUILD_TIME=$BUILD_TIME
-RUN npm run build
+RUN apt-get update && apt-get install -y git --no-install-recommends && rm -rf /var/lib/apt/lists/*
+RUN GIT_SHA=$(git rev-parse --short HEAD 2>/dev/null || echo unknown) \
+    && BUILD_TIME=$(TZ=America/Chicago date '+%m/%d %H:%M CST') \
+    && VITE_GIT_SHA=$GIT_SHA VITE_BUILD_TIME="$BUILD_TIME" npm run build
 
 # ── Production stage ──────────────────────────────────────────────────────────
 FROM node:20-slim
