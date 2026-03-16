@@ -10,6 +10,8 @@ import {
 } from './sounds'
 
 const BASE = import.meta.env.BASE_URL
+const BUILD_SHA = import.meta.env.VITE_GIT_SHA || 'dev'
+const BUILD_TIME = import.meta.env.VITE_BUILD_TIME || ''
 
 type AppStatus = 'idle' | 'listening' | 'recording' | 'waiting' | 'playing'
 
@@ -1254,6 +1256,10 @@ export default function App() {
           ) : (
             <div className="header-back-placeholder" />
           )}
+          <div className="build-info">
+            {BUILD_SHA !== 'dev' && <span>{BUILD_SHA.slice(0, 7)}</span>}
+            {BUILD_TIME && <span>{BUILD_TIME}</span>}
+          </div>
         </div>
 
         {/* Center: title + subtitle */}

@@ -5,6 +5,10 @@ WORKDIR /app
 COPY package.json package-lock.json* ./
 RUN npm ci
 COPY . .
+ARG GIT_SHA=unknown
+ARG BUILD_TIME=unknown
+ENV VITE_GIT_SHA=$GIT_SHA
+ENV VITE_BUILD_TIME=$BUILD_TIME
 RUN npm run build
 
 # ── Production stage ──────────────────────────────────────────────────────────

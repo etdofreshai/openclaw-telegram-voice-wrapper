@@ -1262,3 +1262,16 @@ button:disabled {
 .vad-interrupt-btn:active {
   background: rgba(137, 180, 250, 0.3);
 }
+
+.build-info {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  font-size: 0.6rem;
+  color: rgba(205, 214, 244, 0.3);
+  line-height: 1.3;
+  margin-top: 2px;
+  font-family: monospace;
+  pointer-events: none;
+  user-select: none;
+}
