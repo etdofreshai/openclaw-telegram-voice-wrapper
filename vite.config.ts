@@ -1,6 +1,6 @@
 import { defineConfig, type Plugin } from 'vite'
 import react from '@vitejs/plugin-react'
-import { spawn } from 'child_process'
+import { spawn, execSync } from 'child_process'
 
 function autoBackend(): Plugin {
   let proc: ReturnType<typeof spawn> | null = null
@@ -29,8 +29,19 @@ const frontendPort = parseInt(process.env.FRONTEND_PORT || '3000')
 // Dev: Vite on FRONTEND_PORT (3000), Express on BACKEND_PORT (3001), Vite proxies API/WS
 // Prod: Express on PORT (3000) serves everything (static + API + WS)
 
+// Inject build info at build time if not already set via env vars
+const buildTime = process.env.VITE_BUILD_TIME || new Date().toISOString()
+let gitSha = process.env.VITE_GIT_SHA || 'dev'
+if (gitSha === 'dev') {
+  try { gitSha = execSync('git rev-parse --short HEAD').toString().trim() } catch {}
+}
+
 export default defineConfig({
   plugins: [react(), autoBackend()],
+  define: {
+    'import.meta.env.VITE_BUILD_TIME': JSON.stringify(buildTime),
+    'import.meta.env.VITE_GIT_SHA': JSON.stringify(gitSha),
+  },
   server: {
     port: frontendPort,
     allowedHosts: true,
