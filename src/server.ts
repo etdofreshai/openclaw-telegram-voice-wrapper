@@ -13,6 +13,7 @@ import { TelegramClient } from 'telegram';
 import { StringSession } from 'telegram/sessions/index.js';
 import { NewMessage, NewMessageEvent } from 'telegram/events/index.js';
 import { CustomFile } from 'telegram/client/uploads.js';
+import { Api } from 'telegram';
 
 dotenv.config();
 
@@ -39,6 +40,60 @@ async function convertToOgg(inputBuffer: Buffer): Promise<Buffer<ArrayBuffer>> {
     fs.promises.unlink(outputPath).catch(() => {}),
   ]);
   return Buffer.from(out) as Buffer<ArrayBuffer>;
+}
+
+/** Extract waveform (100 bars, 0-31 each) and duration from an audio buffer using ffmpeg. */
+async function extractWaveform(audioBuffer: Buffer): Promise<{ waveform: Buffer; duration: number }> {
+  const id = randomBytes(8).toString('hex');
+  const inputPath = join(tmpdir(), `wf_in_${id}`);
+  const pcmPath = join(tmpdir(), `wf_out_${id}.pcm`);
+  await fs.promises.writeFile(inputPath, audioBuffer);
+
+  // Get duration
+  const duration = await new Promise<number>((resolve, reject) => {
+    ffmpeg.ffprobe(inputPath, (err: Error | null, metadata: { format?: { duration?: number } }) => {
+      if (err) return reject(err);
+      resolve(metadata?.format?.duration ?? 0);
+    });
+  });
+
+  // Decode to raw PCM s16le mono
+  await new Promise<void>((resolve, reject) => {
+    ffmpeg(inputPath)
+      .outputOptions(['-f s16le', '-acodec pcm_s16le', '-ar 8000', '-ac 1'])
+      .save(pcmPath)
+      .on('end', () => resolve())
+      .on('error', (err: Error) => reject(err));
+  });
+
+  const pcmData = await fs.promises.readFile(pcmPath);
+  await Promise.all([
+    fs.promises.unlink(inputPath).catch(() => {}),
+    fs.promises.unlink(pcmPath).catch(() => {}),
+  ]);
+
+  const BARS = 100;
+  const samples = new Int16Array(pcmData.buffer, pcmData.byteOffset, pcmData.byteLength / 2);
+  const chunkSize = Math.max(1, Math.floor(samples.length / BARS));
+  const peaks: number[] = [];
+
+  for (let i = 0; i < BARS; i++) {
+    const start = i * chunkSize;
+    const end = Math.min(start + chunkSize, samples.length);
+    let sum = 0;
+    for (let j = start; j < end; j++) {
+      sum += samples[j] * samples[j];
+    }
+    peaks.push(Math.sqrt(sum / (end - start)));
+  }
+
+  const maxPeak = Math.max(...peaks, 1);
+  const waveform = Buffer.alloc(BARS);
+  for (let i = 0; i < BARS; i++) {
+    waveform[i] = Math.round((peaks[i] / maxPeak) * 31);
+  }
+
+  return { waveform, duration: Math.round(duration) };
 }
 
 const PORT = parseInt(process.env.PORT || process.env.BACKEND_PORT || '3000');
@@ -308,12 +363,36 @@ app.post('/api/send-voice', upload.single('audio'), async (req, res) => {
       conversionNote = `conversion failed: ${convMsg}`;
     }
 
+    // Extract waveform and duration for Telegram voice note visualization
+    let waveformData: Buffer | undefined;
+    let durationSecs = 0;
+    try {
+      const wf = await extractWaveform(buffer);
+      waveformData = wf.waveform;
+      durationSecs = wf.duration;
+      console.log(`[Send Voice] Waveform extracted: ${durationSecs}s, ${waveformData.length} bars`);
+    } catch (wfErr) {
+      console.warn('[Send Voice] Waveform extraction failed:', wfErr instanceof Error ? wfErr.message : String(wfErr));
+    }
+
+    const sendOpts: Parameters<typeof telegramClient.sendFile>[1] = {
+      file: new CustomFile('voice.ogg', buffer.length, '', buffer),
+      voiceNote: true,
+    };
+
+    if (waveformData) {
+      sendOpts.attributes = [
+        new Api.DocumentAttributeAudio({
+          voice: true,
+          duration: durationSecs,
+          waveform: waveformData,
+        }),
+      ];
+    }
+
     await telegramClient.sendFile(
       targetChatId as Parameters<typeof telegramClient.sendFile>[0],
-      {
-        file: new CustomFile('voice.ogg', buffer.length, '', buffer),
-        voiceNote: true,
-      }
+      sendOpts,
     );
 
     console.log(`[Telegram] Sent voice note: ${buffer.length} bytes (${conversionNote})`);
