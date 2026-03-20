@@ -1600,38 +1600,25 @@ export default function App() {
 
           {/* ─── Center: PTT hold-to-record ─── */}
           <div className={`ptt-zone ${isRecording && manualMode === 'ptt' ? 'recording' : ''}`}>
-            {isRecording && manualMode === 'ptt' ? (
-              <div className="ptt-hold-recording">
-                <div className="ptt-slide-hint">
-                  <span className={`slide-arrow ${cancelHover ? 'cancel-active' : ''}`}>‹‹</span>
-                  <span className="slide-label">{cancelHover ? 'Release to cancel' : 'Slide left to cancel'}</span>
-                </div>
-                <button
-                  ref={pttBtnRef}
-                  className={`ptt-btn recording ${cancelHover ? 'cancel-hover' : ''}`}
-                  onPointerMove={pttPointerMove}
-                  onPointerUp={pttPointerUp}
-                  onPointerCancel={pttPointerUp}
-                  onContextMenu={(e) => e.preventDefault()}
-                >
-                  🎙️
-                </button>
+            {isRecording && manualMode === 'ptt' && (
+              <div className="ptt-slide-hint">
+                <span className={`slide-arrow ${cancelHover ? 'cancel-active' : ''}`}>‹‹</span>
+                <span className="slide-label">{cancelHover ? 'Release to cancel' : 'Slide left to cancel'}</span>
               </div>
-            ) : (
-              <button
-                ref={pttBtnRef}
-                className="ptt-btn"
-                disabled={recordingCooldown || vadEnabled || pttWaiting || (isRecording && manualMode === 'toggle')}
-                onPointerDown={pttPointerDown}
-                onPointerUp={pttPointerUp}
-                onPointerCancel={pttPointerUp}
-                onPointerMove={pttPointerMove}
-                onContextMenu={(e) => e.preventDefault()}
-                title="Hold to record, release to send"
-              >
-                🎙️
-              </button>
             )}
+            <button
+              ref={pttBtnRef}
+              className={`ptt-btn ${isRecording && manualMode === 'ptt' ? 'recording' : ''} ${cancelHover ? 'cancel-hover' : ''}`}
+              disabled={!(isRecording && manualMode === 'ptt') && (recordingCooldown || vadEnabled || pttWaiting || (isRecording && manualMode === 'toggle'))}
+              onPointerDown={pttPointerDown}
+              onPointerUp={pttPointerUp}
+              onPointerCancel={pttPointerUp}
+              onPointerMove={pttPointerMove}
+              onContextMenu={(e) => e.preventDefault()}
+              title="Hold to record, release to send"
+            >
+              🎙️
+            </button>
             <span className="btn-label">Hold</span>
           </div>
 
