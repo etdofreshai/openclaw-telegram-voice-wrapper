@@ -778,12 +778,11 @@ export default function App() {
 
   const startManualRecording = useCallback(async () => {
     if (recordingCooldown || vadEnabled) return
-    // If mic not yet activated, just request permission and wait
+    // If mic not yet activated, start meter and continue to record
     if (!meterStartedRef.current) {
       unlockAudio()
       unlockAudioCtx()
-      startMeter()
-      return
+      await startMeter()
     }
     // Reset stuck guards from previous recordings
     isStoppingRef.current = false
