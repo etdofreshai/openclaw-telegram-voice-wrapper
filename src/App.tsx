@@ -1239,7 +1239,7 @@ export default function App() {
   }, [cancelManualRecording])
 
   // ─── PTT context state ──────────────────────────────────────────────────
-  const pttActive = !vadEnabled && (status === 'recording' || status === 'waiting')
+  const pttActive = !vadEnabled && manualMode === 'ptt' && (status === 'recording' || status === 'waiting')
   const pttRecording = !vadEnabled && status === 'recording'
   const pttWaiting = !vadEnabled && status === 'waiting'
 
