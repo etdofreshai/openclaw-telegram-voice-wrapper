@@ -88,9 +88,20 @@ async function extractWaveform(audioBuffer: Buffer): Promise<{ waveform: Buffer;
   }
 
   const maxPeak = Math.max(...peaks, 1);
-  const waveform = Buffer.alloc(BARS);
+  // Telegram expects 5-bit packed waveform: 100 bars × 5 bits = 500 bits = 63 bytes
+  const values = peaks.map(p => Math.round((p / maxPeak) * 31));
+  const packedLen = Math.ceil(BARS * 5 / 8); // 63
+  const waveform = Buffer.alloc(packedLen);
+  let bitOffset = 0;
   for (let i = 0; i < BARS; i++) {
-    waveform[i] = Math.round((peaks[i] / maxPeak) * 31);
+    const val = values[i] & 0x1f; // 5 bits, 0-31
+    const byteIdx = Math.floor(bitOffset / 8);
+    const bitIdx = bitOffset % 8;
+    waveform[byteIdx] |= (val << bitIdx) & 0xff;
+    if (bitIdx + 5 > 8 && byteIdx + 1 < packedLen) {
+      waveform[byteIdx + 1] |= val >> (8 - bitIdx);
+    }
+    bitOffset += 5;
   }
 
   return { waveform, duration: Math.round(duration) };
@@ -377,18 +388,14 @@ app.post('/api/send-voice', upload.single('audio'), async (req, res) => {
 
     const sendOpts: Parameters<typeof telegramClient.sendFile>[1] = {
       file: new CustomFile('voice.ogg', buffer.length, '', buffer),
-      voiceNote: true,
-    };
-
-    if (waveformData) {
-      sendOpts.attributes = [
+      attributes: [
         new Api.DocumentAttributeAudio({
           voice: true,
           duration: durationSecs,
-          waveform: waveformData,
+          waveform: waveformData || Buffer.alloc(63),
         }),
-      ];
-    }
+      ],
+    };
 
     await telegramClient.sendFile(
       targetChatId as Parameters<typeof telegramClient.sendFile>[0],
