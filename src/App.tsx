@@ -1257,13 +1257,19 @@ export default function App() {
         <div className="header-center">
           <h1>{selectedChatId ? chatTitle : 'OpenClaw Voice'}</h1>
           <div className="subtitle">
-            {!wsConnected
-              ? 'connecting...'
-              : !telegramConnected
-                ? 'connecting to Telegram...'
-                : selectedChatId
-                  ? 'voice chat'
-                  : 'select a chat to start'}
+            {typingAction && selectedChatId
+              ? (typingAction === 'SendMessageRecordAudioAction'
+                  ? `${typingSender} is recording audio...`
+                  : typingAction === 'SendMessageUploadAudioAction'
+                    ? `${typingSender} is sending audio...`
+                    : `${typingSender} is typing...`)
+              : !wsConnected
+                ? 'connecting...'
+                : !telegramConnected
+                  ? 'connecting to Telegram...'
+                  : selectedChatId
+                    ? 'voice chat'
+                    : 'select a chat to start'}
           </div>
         </div>
 
@@ -1308,19 +1314,7 @@ export default function App() {
         </div>
       )}
 
-      {/* Typing indicator — positioned under header like Telegram */}
-      {typingAction && selectedChatId && (
-        <div className="typing-bar">
-          <div className="typing-dots"><span /><span /><span /></div>
-          <span>
-            {typingAction === 'SendMessageRecordAudioAction'
-              ? `${typingSender} is recording audio`
-              : typingAction === 'SendMessageUploadAudioAction'
-                ? `${typingSender} is sending audio`
-                : `${typingSender} is typing`}
-          </span>
-        </div>
-      )}
+      {/* Typing indicator now shown in header subtitle */}
 
       {/* Chat picker — shown when Telegram is connected but no chat selected */}
       {telegramConnected && !selectedChatId && (
