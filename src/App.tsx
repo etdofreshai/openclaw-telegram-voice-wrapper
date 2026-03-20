@@ -223,6 +223,12 @@ export default function App() {
   // Synchronous status update — prevents race conditions where VAD callbacks
   // read statusRef before a useEffect can sync it
   const updateStatus = useCallback((s: AppStatus) => {
+    const prev = statusRef.current
+    // Debug: trace any transition away from 'recording' to find the toggle-talk bug
+    if (prev === 'recording' && s !== 'recording') {
+      console.warn(`[STATUS] recording → ${s}`, new Error().stack)
+    }
+    console.log(`[STATUS] ${prev} → ${s}`)
     statusRef.current = s
     setStatus(s)
     // Manage waiting cancel button visibility
@@ -300,6 +306,15 @@ export default function App() {
   const playNextInQueue = useCallback(() => {
     const queue = audioQueueRef.current
     if (queue.length === 0) {
+      console.warn('[playNextInQueue] queue empty, resetting to idle/listening. manualModeRef:', manualModeRef.current, 'status:', statusRef.current, new Error().stack)
+      // Don't reset to idle if we're in a manual recording session
+      if (statusRef.current === 'recording') {
+        console.warn('[playNextInQueue] SKIPPING reset — currently recording')
+        ttsPlayingRef.current = false
+        setTtsPlaying(false)
+        setAudioQueueLen(0)
+        return
+      }
       ttsPlayingRef.current = false
       setTtsPlaying(false)
       setAudioQueueLen(0)
