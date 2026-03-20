@@ -615,15 +615,13 @@ export default function App() {
 
   const unlockAudio = useCallback(() => {
     if (meterStartedRef.current) return
-    const a = ensureTtsAudio()
-    const wasSrc = a.src
-    a.src = 'data:audio/wav;base64,UklGRiQAAABXQVZFZm10IBAAAAABAAEARKwAAIhYAQACABAAZGF0YQAAAAA='
-    a.play().then(() => {
-      a.pause()
-      a.currentTime = 0
-      ttsPlayingRef.current = false
-      if (wasSrc) a.src = wasSrc
-    }).catch(() => { ttsPlayingRef.current = false })
+    // Use a throwaway Audio element for the unlock sound — NOT the TTS element.
+    // Playing through the TTS element triggers its `ended` handler → playNextInQueue()
+    // → updateStatus('idle'), which races with and cancels manual recordings.
+    const tmp = new Audio('data:audio/wav;base64,UklGRiQAAABXQVZFZm10IBAAAAABAAEARKwAAIhYAQACABAAZGF0YQAAAAA=')
+    tmp.play().then(() => { tmp.pause() }).catch(() => {})
+    // Still ensure the TTS element exists for later playback
+    ensureTtsAudio()
     startMeter()
   }, [ensureTtsAudio, startMeter])
 
@@ -780,16 +778,17 @@ export default function App() {
     if (recordingCooldown || vadEnabled) return
     // If mic not yet activated, start meter and continue to record
     if (!meterStartedRef.current) {
-      unlockAudio()
       unlockAudioCtx()
       await startMeter()
+      setMicActivated(true)
     }
     // Reset stuck guards from previous recordings
     isStoppingRef.current = false
     cancelRecordingRef.current = false
 
-    unlockAudio()
     unlockAudioCtx()
+    // Ensure the TTS audio element exists (without playing through it)
+    ensureTtsAudio()
     // Pause playing audio while recording
     if (ttsAudioRef.current && !ttsAudioRef.current.paused) {
       ttsAudioRef.current.pause()
@@ -830,7 +829,7 @@ export default function App() {
       isStoppingRef.current = false
       alert('Could not access microphone.')
     }
-  }, [recordingCooldown, vadEnabled, unlockAudio, updateStatus, startMeter])
+  }, [recordingCooldown, vadEnabled, ensureTtsAudio, updateStatus, startMeter])
 
   const stopManualRecording = useCallback(() => {
     if (isStoppingRef.current) return  // guard against double-fire
