@@ -7,6 +7,8 @@ import {
   soundVadSpeechStart,
   soundVadListening, soundTooShort, soundCalibrationBeep, unlockAudioCtx,
   startThinkingSound, stopThinkingSound, soundCancel,
+  getSoundSettings, setSoundSettings, SOUND_LABELS,
+  type SoundSettings,
 } from './sounds'
 
 const BASE = import.meta.env.BASE_URL
@@ -156,6 +158,18 @@ export default function App() {
   const typingTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   // Suppress late typing events that arrive after a message clears the indicator
   const typingSuppressedUntilRef = useRef<number>(0)
+
+  // Sound settings
+  const [settingsOpen, setSettingsOpen] = useState(false)
+  const [soundCfg, setSoundCfg] = useState<SoundSettings>(getSoundSettings)
+
+  const toggleSound = useCallback((key: keyof SoundSettings) => {
+    setSoundCfg(prev => {
+      const next = { ...prev, [key]: !prev[key] }
+      setSoundSettings(next)
+      return next
+    })
+  }, [])
 
   // Chat selection
   const [selectedChatId, setSelectedChatId] = useState<string | null>(null)
@@ -1253,14 +1267,46 @@ export default function App() {
           </div>
         </div>
 
-        {/* Right: avatar circle */}
+        {/* Right: settings + avatar */}
         <div className="header-right">
+          <button
+            className={`settings-btn ${settingsOpen ? 'active' : ''}`}
+            onClick={() => setSettingsOpen(o => !o)}
+            title="Sound settings"
+          >
+            ⚙️
+          </button>
           <div className="header-avatar">
             {selectedChatId ? chatTitle.charAt(0).toUpperCase() : '📱'}
             <span className={`online-dot ${wsConnected && telegramConnected ? 'online' : ''}`} />
           </div>
         </div>
       </header>
+
+      {/* Settings panel */}
+      {settingsOpen && (
+        <div className="settings-overlay" onClick={() => setSettingsOpen(false)}>
+          <div className="settings-panel" onClick={e => e.stopPropagation()}>
+            <div className="settings-header">
+              <h3>Sound Effects</h3>
+              <button className="settings-close" onClick={() => setSettingsOpen(false)}>✕</button>
+            </div>
+            <div className="settings-list">
+              {(Object.keys(SOUND_LABELS) as (keyof SoundSettings)[]).map(key => (
+                <label key={key} className="settings-toggle">
+                  <span>{SOUND_LABELS[key]}</span>
+                  <input
+                    type="checkbox"
+                    checked={soundCfg[key]}
+                    onChange={() => toggleSound(key)}
+                  />
+                  <span className="toggle-slider" />
+                </label>
+              ))}
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Typing indicator — positioned under header like Telegram */}
       {typingAction && selectedChatId && (
