@@ -1175,6 +1175,8 @@ export default function App() {
   const pttPointerDown = useCallback((e: React.PointerEvent) => {
     e.preventDefault()
     if (recordingCooldown || vadEnabled || status === 'waiting' || status === 'recording') return
+    // Capture pointer so pointerup fires on this element even if finger slides away
+    ;(e.target as HTMLElement).setPointerCapture(e.pointerId)
     manualModeRef.current = 'ptt'
     setManualMode('ptt')
     pttStartXRef.current = e.clientX
