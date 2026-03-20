@@ -1496,6 +1496,131 @@ button:disabled {
 .settings-panel::-webkit-scrollbar-track { background: transparent; }
 .settings-panel::-webkit-scrollbar-thumb { background: var(--surface1); border-radius: 2px; }
 
+/* ─── Button labels ──────────────────────────────────────────────────── */
+.btn-label {
+  display: block;
+  text-align: center;
+  font-size: 0.65rem;
+  color: var(--subtext0);
+  margin-top: 2px;
+  user-select: none;
+  pointer-events: none;
+}
+
+/* ─── PTT hold recording (slide to cancel) ───────────────────────────── */
+.ptt-hold-recording {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.ptt-slide-hint {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 0.75rem;
+  color: var(--subtext0);
+  white-space: nowrap;
+  animation: cancelSlideIn 0.25s ease-out;
+}
+
+.slide-arrow {
+  color: var(--red);
+  font-weight: 700;
+  font-size: 1rem;
+  animation: slideArrowPulse 1s ease-in-out infinite;
+}
+
+.slide-arrow.cancel-active {
+  color: var(--red);
+  animation: none;
+  transform: scale(1.3);
+}
+
+.slide-label {
+  color: var(--subtext0);
+}
+
+@keyframes slideArrowPulse {
+  0%, 100% { opacity: 1; transform: translateX(0); }
+  50% { opacity: 0.5; transform: translateX(-4px); }
+}
+
+/* ─── Toggle-to-talk zone ────────────────────────────────────────────── */
+.toggle-talk-zone {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+}
+
+.toggle-talk-btn {
+  width: 42px;
+  height: 42px;
+  border-radius: 50%;
+  background: var(--surface0);
+  color: var(--text);
+  font-size: 1.1rem;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  border: 2px solid var(--surface2);
+  transition: all 0.15s;
+  -webkit-tap-highlight-color: transparent;
+}
+
+.toggle-talk-btn:hover:not(:disabled) {
+  background: var(--surface1);
+  border-color: var(--blue);
+}
+
+.toggle-recording-controls {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  animation: cancelFadeIn 0.2s ease-out;
+}
+
+.toggle-cancel-btn {
+  width: 36px;
+  height: 36px;
+  border-radius: 50%;
+  background: rgba(239, 83, 80, 0.15);
+  border: 2px solid var(--red);
+  color: var(--red);
+  font-size: 1rem;
+  font-weight: 700;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  transition: background 0.15s, transform 0.1s;
+  -webkit-tap-highlight-color: transparent;
+}
+
+.toggle-cancel-btn:hover { background: rgba(239, 83, 80, 0.3); }
+.toggle-cancel-btn:active { transform: scale(0.9); }
+
+.toggle-submit-btn {
+  width: 36px;
+  height: 36px;
+  border-radius: 50%;
+  background: rgba(79, 174, 78, 0.15);
+  border: 2px solid var(--green);
+  color: var(--green);
+  font-size: 1rem;
+  font-weight: 700;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  transition: background 0.15s, transform 0.1s;
+  -webkit-tap-highlight-color: transparent;
+}
+
+.toggle-submit-btn:hover { background: rgba(79, 174, 78, 0.3); }
+.toggle-submit-btn:active { transform: scale(0.9); }
+
 .vad-interrupt-btn {
   background: rgba(137, 180, 250, 0.15);
   border: 1px solid rgba(137, 180, 250, 0.4);

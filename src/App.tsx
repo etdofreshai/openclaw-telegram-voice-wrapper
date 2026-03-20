@@ -1166,9 +1166,64 @@ export default function App() {
     }
   }, [vadLevel, vadThreshold])
 
+  // ─── Recording mode tracking ────────────────────────────────────────────
+  // Track which manual mode started the current recording: 'ptt' (hold) or 'toggle' (tap)
+  const manualModeRef = useRef<'ptt' | 'toggle' | null>(null)
+  const [manualMode, setManualMode] = useState<'ptt' | 'toggle' | null>(null)
+
+  // ─── PTT (hold-to-record) handlers ────────────────────────────────────
+  const pttPointerDown = useCallback((e: React.PointerEvent) => {
+    e.preventDefault()
+    if (recordingCooldown || vadEnabled || status === 'waiting' || status === 'recording') return
+    manualModeRef.current = 'ptt'
+    setManualMode('ptt')
+    pttStartXRef.current = e.clientX
+    touchActiveRef.current = true
+    startManualRecording()
+  }, [recordingCooldown, vadEnabled, status, startManualRecording])
+
+  const pttPointerMove = useCallback((e: React.PointerEvent) => {
+    if (!touchActiveRef.current || manualModeRef.current !== 'ptt') return
+    const dx = pttStartXRef.current - e.clientX
+    if (dx > 80) {
+      setCancelHover(true)
+    } else {
+      setCancelHover(false)
+    }
+  }, [])
+
+  const pttPointerUp = useCallback(() => {
+    if (!touchActiveRef.current || manualModeRef.current !== 'ptt') return
+    touchActiveRef.current = false
+    if (cancelHover) {
+      setCancelHover(false)
+      cancelManualRecording()
+    } else if (status === 'recording') {
+      stopManualRecording()
+    }
+  }, [cancelHover, status, cancelManualRecording, stopManualRecording])
+
+  // ─── Toggle-to-talk handlers ──────────────────────────────────────────
+  const toggleTalkStart = useCallback(() => {
+    if (recordingCooldown || vadEnabled || status === 'waiting' || status === 'recording') return
+    manualModeRef.current = 'toggle'
+    setManualMode('toggle')
+    startManualRecording()
+  }, [recordingCooldown, vadEnabled, status, startManualRecording])
+
+  const toggleTalkSubmit = useCallback(() => {
+    if (manualModeRef.current !== 'toggle') return
+    stopManualRecording()
+  }, [stopManualRecording])
+
+  const toggleTalkCancel = useCallback(() => {
+    if (manualModeRef.current !== 'toggle') return
+    cancelManualRecording()
+    manualModeRef.current = null
+    setManualMode(null)
+  }, [cancelManualRecording])
+
   // ─── PTT context state ──────────────────────────────────────────────────
-  // Determine if we're in a PTT flow (recording or waiting after PTT release)
-  // VAD mode doesn't use PTT, so pttActive only applies to manual recording
   const pttActive = !vadEnabled && (status === 'recording' || status === 'waiting')
   const pttRecording = !vadEnabled && status === 'recording'
   const pttWaiting = !vadEnabled && status === 'waiting'
@@ -1541,44 +1596,44 @@ export default function App() {
             )}
           </div>
 
-          <div className={`ptt-zone ${isRecording ? 'recording' : ''}`}>
-            {isRecording ? (
-              <div className="ptt-recording-controls">
-                <button
-                  className="ptt-cancel-btn"
-                  onClick={cancelManualRecording}
-                  title="Cancel recording"
-                >
-                  ✕ Cancel
-                </button>
-                <div className="ptt-recording-indicator">
-                  <span className="vad-record-dot" />
-                  <span>Recording…</span>
+          {/* ─── Center: PTT hold-to-record ─── */}
+          <div className={`ptt-zone ${isRecording && manualMode === 'ptt' ? 'recording' : ''}`}>
+            {isRecording && manualMode === 'ptt' ? (
+              <div className="ptt-hold-recording">
+                <div className="ptt-slide-hint">
+                  <span className={`slide-arrow ${cancelHover ? 'cancel-active' : ''}`}>‹‹</span>
+                  <span className="slide-label">{cancelHover ? 'Release to cancel' : 'Slide left to cancel'}</span>
                 </div>
                 <button
-                  className="ptt-submit-btn"
-                  onClick={stopManualRecording}
-                  title="Send recording"
+                  ref={pttBtnRef}
+                  className={`ptt-btn recording ${cancelHover ? 'cancel-hover' : ''}`}
+                  onPointerMove={pttPointerMove}
+                  onPointerUp={pttPointerUp}
+                  onPointerCancel={pttPointerUp}
+                  onContextMenu={(e) => e.preventDefault()}
                 >
-                  ✓ Send
+                  🎙️
                 </button>
               </div>
             ) : (
               <button
                 ref={pttBtnRef}
                 className="ptt-btn"
-                disabled={recordingCooldown || vadEnabled || pttWaiting}
-                onClick={() => {
-                  if (!isRecording) startManualRecording()
-                }}
+                disabled={recordingCooldown || vadEnabled || pttWaiting || (isRecording && manualMode === 'toggle')}
+                onPointerDown={pttPointerDown}
+                onPointerUp={pttPointerUp}
+                onPointerCancel={pttPointerUp}
+                onPointerMove={pttPointerMove}
                 onContextMenu={(e) => e.preventDefault()}
-                title="Tap to start recording"
+                title="Hold to record, release to send"
               >
                 🎙️
               </button>
             )}
+            <span className="btn-label">Hold</span>
           </div>
 
+          {/* ─── Right: Toggle-to-talk + VAD + controls ─── */}
           <div className="controls-right controls-fadeable">
             <div className={`status-indicator ${status}`}>
               {STATUS_ICONS[status]} {STATUS_LABELS[status]}
@@ -1589,14 +1644,26 @@ export default function App() {
             <button className={`vad-btn ${vadEnabled ? 'active' : ''}`} onClick={toggleVad} title="Toggle Voice Activity Detection">
               {vadEnabled ? '🔴' : '🎙️'}
             </button>
-            <button
-              className={`vad-btn ${isRecording ? 'active recording-toggle' : ''}`}
-              disabled={recordingCooldown || vadEnabled}
-              onClick={() => { if (isRecording) stopManualRecording(); else startManualRecording() }}
-              title="Toggle recording (or press Space)"
-            >
-              {isRecording ? '⏹' : '🎤'}
-            </button>
+            {/* Toggle-to-talk button */}
+            <div className="toggle-talk-zone">
+              {isRecording && manualMode === 'toggle' ? (
+                <div className="toggle-recording-controls">
+                  <button className="toggle-cancel-btn" onClick={toggleTalkCancel} title="Cancel">✕</button>
+                  <span className="vad-record-dot" />
+                  <button className="toggle-submit-btn" onClick={toggleTalkSubmit} title="Send">✓</button>
+                </div>
+              ) : (
+                <button
+                  className="toggle-talk-btn"
+                  disabled={recordingCooldown || vadEnabled || pttWaiting || (isRecording && manualMode === 'ptt')}
+                  onClick={toggleTalkStart}
+                  title="Tap to start, then submit or cancel"
+                >
+                  🎤
+                </button>
+              )}
+              <span className="btn-label">Tap</span>
+            </div>
           </div>
         </div>
 
