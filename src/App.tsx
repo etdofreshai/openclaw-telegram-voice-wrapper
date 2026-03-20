@@ -140,6 +140,9 @@ export default function App() {
   const [ttsPlaying, setTtsPlaying] = useState(false)
   const [tooShortToast, setTooShortToast] = useState(false)
   const [cancelHover, setCancelHover] = useState(false)
+  const [waitingShowCancel, setWaitingShowCancel] = useState(false)
+  const waitingCancelTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const waitingTextReceivedRef = useRef(false)
   const pttBtnRef = useRef<HTMLButtonElement>(null)
   const pttStartXRef = useRef(0)
   const [playbackSpeed, setPlaybackSpeed] = useState(() => {
@@ -222,6 +225,21 @@ export default function App() {
   const updateStatus = useCallback((s: AppStatus) => {
     statusRef.current = s
     setStatus(s)
+    // Manage waiting cancel button visibility
+    if (s === 'waiting') {
+      waitingTextReceivedRef.current = false
+      setWaitingShowCancel(false)
+      // Show cancel after 12s timeout regardless
+      if (waitingCancelTimerRef.current) clearTimeout(waitingCancelTimerRef.current)
+      waitingCancelTimerRef.current = setTimeout(() => {
+        if (statusRef.current === 'waiting') setWaitingShowCancel(true)
+      }, 12000)
+    } else {
+      // Leaving waiting state — clean up
+      if (waitingCancelTimerRef.current) { clearTimeout(waitingCancelTimerRef.current); waitingCancelTimerRef.current = null }
+      setWaitingShowCancel(false)
+      waitingTextReceivedRef.current = false
+    }
   }, [])
 
   // Keep refs in sync
@@ -396,20 +414,11 @@ export default function App() {
           const quotedText = msg.quotedText || ''
           if ((text || quotedText) && text !== 'NO_REPLY' && text !== 'HEARTBEAT_OK') {
             upsertMessage(msg.messageId, { role: 'assistant', text, quotedText: quotedText || undefined, messageId: msg.messageId, timestamp: msg.timestamp || Date.now() })
-            // Resume interactive mode after text-only response (no voice to play)
-            // Wait 1.5s to avoid re-arming VAD before audio arrives
+            // Text arrived while waiting for audio — show cancel button immediately
+            // but keep waiting for audio to arrive
             if (statusRef.current === 'waiting') {
-              setTimeout(() => {
-                if (statusRef.current === 'waiting' && !ttsPlayingRef.current && audioQueueRef.current.length === 0) {
-                  if (vadRef.current && vadEnabledRef.current) {
-                    vadRef.current.resume()
-                    updateStatus('listening')
-                    soundVadListening()
-                  } else {
-                    updateStatus('idle')
-                  }
-                }
-              }, 1500)
+              waitingTextReceivedRef.current = true
+              setWaitingShowCancel(true)
             }
           }
         } else if (msg.type === 'text_update') {
@@ -419,6 +428,11 @@ export default function App() {
           const quotedText = msg.quotedText || ''
           if (text || quotedText) {
             upsertMessage(msg.messageId, { role: 'assistant', text, quotedText: quotedText || undefined, messageId: msg.messageId, timestamp: msg.timestamp || Date.now(), senderName: typingSenderRef.current })
+            // Text update while waiting — show cancel button
+            if (statusRef.current === 'waiting') {
+              waitingTextReceivedRef.current = true
+              setWaitingShowCancel(true)
+            }
           }
         } else if (msg.type === 'typing') {
           // Filter: only show typing for the currently selected chat
@@ -1174,6 +1188,18 @@ export default function App() {
   const isPlaying = status === 'playing'
   const chatTitle = dialogs.find((d) => d.id === selectedChatId)?.title || 'Bot'
 
+  // Cancel waiting for audio — show text response as-is and return to idle/listening
+  const cancelWaiting = useCallback(() => {
+    soundCancel()
+    if (vadRef.current && vadEnabledRef.current) {
+      vadRef.current.resume()
+      updateStatus('listening')
+      soundVadListening()
+    } else {
+      updateStatus('idle')
+    }
+  }, [updateStatus])
+
   // Interrupt TTS and re-arm VAD immediately
   const interruptAndRecord = useCallback(() => {
     if (ttsAudioRef.current) {
@@ -1434,8 +1460,8 @@ export default function App() {
               {status === 'waiting' && (
                 <span className="vad-bar-status-text"><div className="spinner" /> {waitingDetail}</span>
               )}
-              {status === 'waiting' && (
-                <button className="vad-interrupt-btn" onClick={interruptAndRecord}>⏸ Interrupt</button>
+              {status === 'waiting' && waitingShowCancel && (
+                <button className="vad-interrupt-btn" onClick={cancelWaiting}>✕ Cancel</button>
               )}
               {status === 'playing' && (
                 <span className="vad-bar-status-text">🔊 Playing response…</span>
@@ -1485,6 +1511,9 @@ export default function App() {
           <div className="ptt-status-message">
             <div className="spinner" />
             <span>{waitingDetail}</span>
+            {waitingShowCancel && (
+              <button className="ptt-cancel-waiting-btn" onClick={cancelWaiting}>✕ Cancel</button>
+            )}
           </div>
         )}
         <div className="controls-row">

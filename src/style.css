@@ -1251,6 +1251,22 @@ button:disabled {
   to { opacity: 1; transform: translateY(0); }
 }
 
+.ptt-cancel-waiting-btn {
+  background: var(--surface1);
+  color: var(--red);
+  border: 1px solid var(--red);
+  border-radius: 12px;
+  padding: 2px 12px;
+  font-size: 0.78rem;
+  cursor: pointer;
+  margin-left: 4px;
+  transition: background 0.15s;
+}
+.ptt-cancel-waiting-btn:hover {
+  background: var(--red);
+  color: var(--base);
+}
+
 .controls.ptt-waiting .ptt-btn {
   opacity: 0.4;
   cursor: not-allowed;
