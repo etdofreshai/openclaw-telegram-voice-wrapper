@@ -750,14 +750,17 @@ export default function App() {
 
   const startManualRecording = useCallback(async () => {
     if (recordingCooldown || vadEnabled) return
-    // If mic not yet activated, just request permission and wait — don't try to record
-    // (getUserMedia async + permission prompt would leave state broken on release)
+    // If mic not yet activated, just request permission and wait
     if (!meterStartedRef.current) {
       unlockAudio()
       unlockAudioCtx()
       startMeter()
       return
     }
+    // Reset stuck guards from previous recordings
+    isStoppingRef.current = false
+    cancelRecordingRef.current = false
+
     unlockAudio()
     unlockAudioCtx()
     // Pause playing audio while recording
@@ -767,7 +770,8 @@ export default function App() {
     try {
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true })
       audioChunksRef.current = []
-      const mr = new MediaRecorder(stream, { mimeType: getSupportedMimeType() })
+      const mimeType = getSupportedMimeType()
+      const mr = new MediaRecorder(stream, { mimeType })
       mediaRecorderRef.current = mr
       mr.ondataavailable = (e) => { if (e.data.size > 0) audioChunksRef.current.push(e.data) }
       mr.onstop = () => {
@@ -780,13 +784,15 @@ export default function App() {
         }
         processRecording()
       }
-      mr.start(1000) // collect chunks every 1s to avoid browser buffer limits on long recordings
+      mr.start(1000)
       recordingStartRef.current = Date.now()
       updateStatus('recording')
       soundRecordStart()
 
       // Safety timeout: force-stop PTT recording after 300s (5 min)
-      setTimeout(() => {
+      if (safetyTimerRef.current) clearTimeout(safetyTimerRef.current)
+      safetyTimerRef.current = setTimeout(() => {
+        safetyTimerRef.current = null
         if (mr.state !== 'inactive') {
           console.warn('PTT recording safety timeout (300s) — force stopping')
           mr.stop()
@@ -794,18 +800,19 @@ export default function App() {
       }, 300000)
     } catch (err) {
       console.error('Mic error:', err)
+      isStoppingRef.current = false
       alert('Could not access microphone.')
     }
   }, [recordingCooldown, vadEnabled, unlockAudio, updateStatus, startMeter])
 
   const stopManualRecording = useCallback(() => {
-    if (isStoppingRef.current) return  // guard against double-fire (touch + synthetic mouse events)
+    if (isStoppingRef.current) return  // guard against double-fire
     const mr = mediaRecorderRef.current
     if (!mr || mr.state === 'inactive') return
     isStoppingRef.current = true
 
     const duration = Date.now() - recordingStartRef.current
-    const MIN_PTT_DURATION_MS = 2500
+    const MIN_PTT_DURATION_MS = 1000
 
     if (duration < MIN_PTT_DURATION_MS) {
       // Too short — cancel recording, don't send
@@ -815,12 +822,10 @@ export default function App() {
       setTimeout(() => setTooShortToast(false), 2000)
       updateStatus('idle')
       const captured = mr
-      // Stop the recorder — onstop handler will check cancelRecordingRef and discard
       setTimeout(() => {
         if (captured.state !== 'inactive') captured.stop()
+        isStoppingRef.current = false
       }, 100)
-      // Reset stopping guard immediately so next recording isn't blocked
-      isStoppingRef.current = false
       return
     }
 
@@ -1103,35 +1108,7 @@ export default function App() {
     return () => document.removeEventListener('visibilitychange', handleVisibilityChange)
   }, [playNextInQueue, updateStatus])
 
-  // ─── Document-level mouse tracking for PTT drag-to-cancel ──────────────────
-  useEffect(() => {
-    const onMouseMove = (e: MouseEvent) => {
-      if (!mouseDownRef.current || touchActiveRef.current) return
-      if (statusRef.current !== 'recording') return
-      const dx = pttStartXRef.current - e.clientX
-      setCancelHover(dx > 80)
-    }
-    const onMouseUp = () => {
-      if (!mouseDownRef.current || touchActiveRef.current) return
-      mouseDownRef.current = false
-      if (statusRef.current === 'recording') {
-        // Read cancelHover from the ref-like state — use a small trick:
-        // We need the current value, so we use the setter's callback form
-        setCancelHover((prev) => {
-          if (prev) { cancelManualRecording() } else { stopManualRecording() }
-          return false
-        })
-      } else {
-        setCancelHover(false)
-      }
-    }
-    document.addEventListener('mousemove', onMouseMove)
-    document.addEventListener('mouseup', onMouseUp)
-    return () => {
-      document.removeEventListener('mousemove', onMouseMove)
-      document.removeEventListener('mouseup', onMouseUp)
-    }
-  }, [cancelManualRecording, stopManualRecording])
+
 
   // ─── Init: Keyboard handler ────────────────────────────────────────────────
   useEffect(() => {
@@ -1285,6 +1262,20 @@ export default function App() {
         </div>
       </header>
 
+      {/* Typing indicator — positioned under header like Telegram */}
+      {typingAction && selectedChatId && (
+        <div className="typing-bar">
+          <div className="typing-dots"><span /><span /><span /></div>
+          <span>
+            {typingAction === 'SendMessageRecordAudioAction'
+              ? `${typingSender} is recording audio`
+              : typingAction === 'SendMessageUploadAudioAction'
+                ? `${typingSender} is sending audio`
+                : `${typingSender} is typing`}
+          </span>
+        </div>
+      )}
+
       {/* Chat picker — shown when Telegram is connected but no chat selected */}
       {telegramConnected && !selectedChatId && (
         <div className="chat-picker">
@@ -1385,22 +1376,7 @@ export default function App() {
           )
         })}
 
-        {typingAction && (
-          <div className="message assistant">
-            <div className="bubble typing-bubble">
-              <div className="typing-indicator">
-                <div className="typing-dots"><span /><span /><span /></div>
-                <span>
-                  {typingAction === 'SendMessageRecordAudioAction'
-                    ? `${typingSender} is recording audio`
-                    : typingAction === 'SendMessageUploadAudioAction'
-                      ? `${typingSender} is sending audio`
-                      : `${typingSender} is typing`}
-                </span>
-              </div>
-            </div>
-          </div>
-        )}
+
       </div>
 
       <div className={`controls ${pttActive ? 'ptt-active' : ''} ${pttRecording ? 'ptt-recording' : ''} ${pttWaiting ? 'ptt-waiting' : ''} ${vadEnabled ? 'vad-mode' : ''} ${vadEnabled ? `vad-phase-${status}` : ''}`}>
@@ -1497,49 +1473,41 @@ export default function App() {
           </div>
 
           <div className={`ptt-zone ${isRecording ? 'recording' : ''}`}>
-            {isRecording && (
-              <div className={`cancel-zone ${cancelHover ? 'active' : ''}`}>
-                <span className="cancel-zone-icon">✕</span>
-                <span className="cancel-zone-label">slide to cancel</span>
+            {isRecording ? (
+              <div className="ptt-recording-controls">
+                <button
+                  className="ptt-cancel-btn"
+                  onClick={cancelManualRecording}
+                  title="Cancel recording"
+                >
+                  ✕ Cancel
+                </button>
+                <div className="ptt-recording-indicator">
+                  <span className="vad-record-dot" />
+                  <span>Recording…</span>
+                </div>
+                <button
+                  className="ptt-submit-btn"
+                  onClick={stopManualRecording}
+                  title="Send recording"
+                >
+                  ✓ Send
+                </button>
               </div>
+            ) : (
+              <button
+                ref={pttBtnRef}
+                className="ptt-btn"
+                disabled={recordingCooldown || vadEnabled || pttWaiting}
+                onClick={() => {
+                  if (!isRecording) startManualRecording()
+                }}
+                onContextMenu={(e) => e.preventDefault()}
+                title="Tap to start recording"
+              >
+                🎙️
+              </button>
             )}
-            <button
-              ref={pttBtnRef}
-              className={`ptt-btn ${isRecording ? 'recording' : ''} ${cancelHover ? 'cancel-hover' : ''}`}
-              disabled={recordingCooldown || vadEnabled || pttWaiting}
-              onMouseDown={(e) => {
-                if (touchActiveRef.current) return; e.preventDefault()
-                pttStartXRef.current = e.clientX
-                mouseDownRef.current = true
-                startManualRecording()
-              }}
-              onMouseUp={() => {
-                if (touchActiveRef.current || !mouseDownRef.current) return
-                mouseDownRef.current = false
-                if (isRecording) { if (cancelHover) { cancelManualRecording(); setCancelHover(false) } else stopManualRecording() }
-                setCancelHover(false)
-              }}
-              onTouchStart={(e) => {
-                e.preventDefault(); touchActiveRef.current = true
-                pttStartXRef.current = e.touches[0].clientX
-                startManualRecording()
-              }}
-              onTouchMove={(e) => {
-                if (!isRecording) return
-                const dx = pttStartXRef.current - e.touches[0].clientX
-                setCancelHover(dx > 80)
-              }}
-              onTouchEnd={(e) => {
-                e.preventDefault()
-                if (isRecording) { if (cancelHover) { cancelManualRecording() } else stopManualRecording() }
-                setCancelHover(false)
-                setTimeout(() => { touchActiveRef.current = false }, 1000)
-              }}
-              onContextMenu={(e) => e.preventDefault()}
-              title="Hold to talk — slide left to cancel"
-            >
-              {cancelHover ? '✕' : '🎙️'}
-            </button>
           </div>
 
           <div className="controls-right controls-fadeable">

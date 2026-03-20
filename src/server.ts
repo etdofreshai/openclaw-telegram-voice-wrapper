@@ -27,7 +27,8 @@ async function convertToOgg(inputBuffer: Buffer): Promise<Buffer<ArrayBuffer>> {
   await fs.promises.writeFile(inputPath, inputBuffer);
   await new Promise<void>((resolve, reject) => {
     ffmpeg(inputPath)
-      .outputOptions(['-c:a libopus', '-b:a 64k', '-vn'])
+      .outputOptions(['-c:a libopus', '-b:a 64k', '-vn', '-application voip', '-ar 48000', '-ac 1'])
+      .outputFormat('ogg')
       .save(outputPath)
       .on('end', () => resolve())
       .on('error', (err: Error) => reject(err));
