@@ -73,7 +73,9 @@ async function extractWaveform(audioBuffer: Buffer): Promise<{ waveform: Buffer;
   ]);
 
   const BARS = 100;
-  const samples = new Int16Array(pcmData.buffer, pcmData.byteOffset, pcmData.byteLength / 2);
+  // Copy pcmData into a fresh ArrayBuffer to avoid Node Buffer pool offset issues
+  const pcmCopy = new Uint8Array(pcmData).buffer;
+  const samples = new Int16Array(pcmCopy);
   const chunkSize = Math.max(1, Math.floor(samples.length / BARS));
   const peaks: number[] = [];
 
@@ -88,6 +90,8 @@ async function extractWaveform(audioBuffer: Buffer): Promise<{ waveform: Buffer;
   }
 
   const maxPeak = Math.max(...peaks, 1);
+  console.log(`[Waveform] samples=${samples.length}, chunkSize=${chunkSize}, maxPeak=${maxPeak.toFixed(1)}, first5peaks=${peaks.slice(0, 5).map(p => p.toFixed(1)).join(',')}`);
+
   // Telegram expects 5-bit packed waveform: 100 bars × 5 bits = 500 bits = 63 bytes
   const values = peaks.map(p => Math.round((p / maxPeak) * 31));
   const packedLen = Math.ceil(BARS * 5 / 8); // 63
