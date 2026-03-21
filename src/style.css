@@ -1520,6 +1520,8 @@ button:disabled {
 }
 
 .ptt-slide-hint {
+  position: absolute;
+  right: calc(100% + 8px);
   display: flex;
   align-items: center;
   gap: 4px;
