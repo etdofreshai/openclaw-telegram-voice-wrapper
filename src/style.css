@@ -813,6 +813,16 @@ button:disabled {
 .calibration-phrase {
   color: var(--text);
   font-style: italic;
+  white-space: normal;
+  word-wrap: break-word;
+  overflow-wrap: break-word;
+  line-height: 1.5;
+  font-size: 0.9rem;
+  margin: 4px 0 8px;
+  padding: 8px 12px;
+  background: var(--surface0);
+  border-radius: 8px;
+  border-left: 3px solid var(--mauve);
 }
 
 /* ─── Speed controls ──────────────────────────────────────────────────── */
