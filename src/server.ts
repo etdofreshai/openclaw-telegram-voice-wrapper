@@ -49,15 +49,7 @@ async function extractWaveform(audioBuffer: Buffer): Promise<{ waveform: Buffer;
   const pcmPath = join(tmpdir(), `wf_out_${id}.pcm`);
   await fs.promises.writeFile(inputPath, audioBuffer);
 
-  // Get duration
-  const duration = await new Promise<number>((resolve, reject) => {
-    ffmpeg.ffprobe(inputPath, (err: Error | null, metadata: { format?: { duration?: number } }) => {
-      if (err) return reject(err);
-      resolve(metadata?.format?.duration ?? 0);
-    });
-  });
-
-  // Decode to raw PCM s16le mono
+  // Decode to raw PCM s16le mono (duration derived from PCM length)
   await new Promise<void>((resolve, reject) => {
     ffmpeg(inputPath)
       .outputOptions(['-f s16le', '-acodec pcm_s16le', '-ar 8000', '-ac 1'])
@@ -67,6 +59,8 @@ async function extractWaveform(audioBuffer: Buffer): Promise<{ waveform: Buffer;
   });
 
   const pcmData = await fs.promises.readFile(pcmPath);
+  // Derive duration from PCM: 8000 samples/sec × 2 bytes/sample = 16000 bytes/sec
+  const duration = Math.round(pcmData.length / 16000);
   await Promise.all([
     fs.promises.unlink(inputPath).catch(() => {}),
     fs.promises.unlink(pcmPath).catch(() => {}),
@@ -385,7 +379,7 @@ app.post('/api/send-voice', upload.single('audio'), async (req, res) => {
       const wf = await extractWaveform(buffer);
       waveformData = wf.waveform;
       durationSecs = wf.duration;
-      console.log(`[Send Voice] Waveform extracted: ${durationSecs}s, ${waveformData.length} bars`);
+      console.log(`[Send Voice] Waveform extracted: ${durationSecs}s, ${waveformData.length} bytes, nonzero=${waveformData.filter((b: number) => b !== 0).length}`);
     } catch (wfErr) {
       console.warn('[Send Voice] Waveform extraction failed:', wfErr instanceof Error ? wfErr.message : String(wfErr));
     }
