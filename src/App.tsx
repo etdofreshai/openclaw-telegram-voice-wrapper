@@ -1630,7 +1630,7 @@ export default function App() {
               onContextMenu={(e) => e.preventDefault()}
               title="Hold to record, release to send"
             >
-              🎙️
+              <span style={{ pointerEvents: 'none' }}>🎙️</span>
             </button>
             <span className="btn-label">Hold</span>
           </div>
