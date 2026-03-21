@@ -1501,6 +1501,87 @@ button:disabled {
 .settings-panel::-webkit-scrollbar-track { background: transparent; }
 .settings-panel::-webkit-scrollbar-thumb { background: var(--surface1); border-radius: 2px; }
 
+/* ─── Settings calibration section ───────────────────────────────────── */
+.settings-calibration {
+  margin-top: 16px;
+  padding-top: 16px;
+  border-top: 1px solid var(--surface1);
+}
+
+.calibrate-settings-btn {
+  width: 100%;
+  padding: 10px 16px;
+  border-radius: 10px;
+  background: var(--surface0);
+  color: var(--text);
+  font-size: 0.9rem;
+  font-weight: 500;
+  cursor: pointer;
+  transition: background 0.15s;
+  border: 1px solid var(--surface1);
+}
+
+.calibrate-settings-btn:hover:not(:disabled) {
+  background: var(--surface1);
+}
+
+.calibrate-settings-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.calibration-progress {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.calibration-status {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 0.85rem;
+  color: var(--text);
+}
+
+.calibration-icon {
+  font-size: 1.2rem;
+}
+
+.calibration-bar {
+  height: 4px;
+  border-radius: 2px;
+  background: var(--surface1);
+  overflow: hidden;
+}
+
+.calibration-bar-fill {
+  height: 100%;
+  border-radius: 2px;
+  animation: calibrationProgress 3.5s linear;
+}
+
+.calibration-bar-fill.silence {
+  background: var(--yellow);
+}
+
+.calibration-bar-fill.speak {
+  background: var(--green);
+  animation-duration: 6s;
+}
+
+@keyframes calibrationProgress {
+  from { width: 0%; }
+  to { width: 100%; }
+}
+
+.calibration-done {
+  margin-top: 8px;
+  font-size: 0.85rem;
+  color: var(--green);
+  text-align: center;
+}
+
 /* ─── Button labels ──────────────────────────────────────────────────── */
 .btn-label {
   display: block;

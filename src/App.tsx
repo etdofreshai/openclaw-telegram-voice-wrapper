@@ -1406,6 +1406,48 @@ export default function App() {
                 </label>
               ))}
             </div>
+
+            {/* Calibration section */}
+            <div className="settings-calibration">
+              {calibrationStep === '' || calibrationStep === 'done' ? (
+                <button
+                  className="calibrate-settings-btn"
+                  disabled={vadCalibrating}
+                  onClick={startCalibration}
+                >
+                  🎚️ Calibrate Microphone
+                </button>
+              ) : (
+                <div className="calibration-progress">
+                  {calibrationStep === 'silence' && (
+                    <>
+                      <div className="calibration-status">
+                        <span className="calibration-icon">🤫</span>
+                        <span>Stay silent for a moment...</span>
+                      </div>
+                      <div className="calibration-bar">
+                        <div className="calibration-bar-fill silence" />
+                      </div>
+                    </>
+                  )}
+                  {calibrationStep === 'speak' && (
+                    <>
+                      <div className="calibration-status">
+                        <span className="calibration-icon">🗣️</span>
+                        <span>Read this aloud:</span>
+                      </div>
+                      <p className="calibration-phrase">{calibrationPhrase}</p>
+                      <div className="calibration-bar">
+                        <div className="calibration-bar-fill speak" />
+                      </div>
+                    </>
+                  )}
+                </div>
+              )}
+              {calibrationStep === 'done' && (
+                <div className="calibration-done">✅ Calibration complete</div>
+              )}
+            </div>
           </div>
         </div>
       )}
