@@ -392,6 +392,7 @@ app.post('/api/send-voice', upload.single('audio'), async (req, res) => {
 
     const sendOpts: Parameters<typeof telegramClient.sendFile>[1] = {
       file: new CustomFile('voice.ogg', buffer.length, '', buffer),
+      voiceNote: true,
       attributes: [
         new Api.DocumentAttributeAudio({
           voice: true,
